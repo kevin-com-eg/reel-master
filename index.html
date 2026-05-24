@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sound Design — دليل شامل</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #141720;
+    --surface2: #1a1f2e;
+    --border: #252b3b;
+    --sfx: #f97316;
+    --sfx-dim: rgba(249,115,22,0.12);
+    --foley: #22d3ee;
+    --foley-dim: rgba(34,211,238,0.10);
+    --amb: #a78bfa;
+    --amb-dim: rgba(167,139,250,0.10);
+    --green: #4ade80;
+    --green-dim: rgba(74,222,128,0.10);
+    --text: #e8eaf0;
+    --muted: #7c8499;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    font-family: 'Cairo', sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px 16px 40px;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 32px;
+    padding-top: 12px;
+  }
+  .header .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 14px;
+    margin-bottom: 14px;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 900;
+    line-height: 1.2;
+    background: linear-gradient(135deg, #f97316, #22d3ee, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+  .header p { color: var(--muted); font-size: 14px; }
+
+  .section-card {
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-icon {
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .sfx .section-icon   { background: var(--sfx-dim); }
+  .foley .section-icon { background: var(--foley-dim); }
+  .amb .section-icon   { background: var(--amb-dim); }
+  .org .section-icon   { background: var(--green-dim); }
+
+  .section-title-wrap h2 { font-size: 18px; font-weight: 900; }
+  .sfx   .section-title-wrap h2 { color: var(--sfx); }
+  .foley .section-title-wrap h2 { color: var(--foley); }
+  .amb   .section-title-wrap h2 { color: var(--amb); }
+  .org   .section-title-wrap h2 { color: var(--green); }
+  .section-title-wrap p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .section-body { padding: 20px; }
+
+  .def-box {
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+    font-size: 14px;
+    line-height: 1.75;
+  }
+  .sfx   .def-box { background: var(--sfx-dim);   border-right: 3px solid var(--sfx); }
+  .foley .def-box { background: var(--foley-dim); border-right: 3px solid var(--foley); }
+  .amb   .def-box { background: var(--amb-dim);   border-right: 3px solid var(--amb); }
+  .org   .def-box { background: var(--green-dim); border-right: 3px solid var(--green); }
+
+  .sub-label {
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px; margin-top: 18px;
+  }
+
+  .examples-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+  .tag {
+    font-size: 12px; font-weight: 600;
+    padding: 5px 12px; border-radius: 8px; border: 1px solid;
+  }
+  .sfx   .tag { background: var(--sfx-dim);   border-color: rgba(249,115,22,.3);  color: #fba768; }
+  .foley .tag { background: var(--foley-dim); border-color: rgba(34,211,238,.3);  color: #67e0f5; }
+  .amb   .tag { background: var(--amb-dim);   border-color: rgba(167,139,250,.3); color: #c4b0fd; }
+  .org   .tag { background: var(--green-dim); border-color: rgba(74,222,128,.3);  color: #86efac; }
+
+  .effects-list { display: flex; flex-direction: column; gap: 8px; }
+  .effect-row {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .effect-row .effect-name {
+    font-size: 13px; font-weight: 700; margin-bottom: 4px;
+  }
+  .sfx   .effect-row .effect-name { color: var(--sfx); }
+  .foley .effect-row .effect-name { color: var(--foley); }
+  .amb   .effect-row .effect-name { color: var(--amb); }
+  .effect-row .effect-path {
+    font-size: 11px; color: #4a5568;
+    background: #0d0f14; border-radius: 5px;
+    padding: 2px 8px; display: inline-block; margin-bottom: 5px;
+    font-family: monospace; letter-spacing: .3px;
+  }
+  .effect-row .effect-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .effect-row .effect-tip {
+    font-size: 12px; color: var(--muted);
+    margin-top: 5px; padding-top: 5px;
+    border-top: 1px solid var(--border);
+    opacity: .8;
+  }
+
+  .levels-block {
+    background: var(--surface2);
+    border-radius: 14px;
+    padding: 16px; margin-top: 8px;
+  }
+  .level-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .level-row:last-child { margin-bottom: 0; }
+  .level-label { font-size: 12px; font-weight: 700; min-width: 90px; flex-shrink: 0; }
+  .level-bar-wrap { flex: 1; height: 8px; background: var(--border); border-radius: 10px; overflow: hidden; }
+  .level-bar { height: 100%; border-radius: 10px; }
+  .level-val { font-size: 12px; font-weight: 700; min-width: 60px; text-align: left; color: var(--muted); }
+
+  .tips-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+  .tip-item { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.7; color: var(--muted); }
+  .tip-dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 7px; flex-shrink: 0; }
+  .sfx   .tip-dot { background: var(--sfx); }
+  .foley .tip-dot { background: var(--foley); }
+  .amb   .tip-dot { background: var(--amb); }
+  .org   .tip-dot { background: var(--green); }
+
+  .divider { height: 1px; background: var(--border); margin: 18px 0; }
+
+  /* Sites grid */
+  .sites-grid { display: flex; flex-direction: column; gap: 8px; }
+  .site-row {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex; align-items: flex-start; gap: 12px;
+  }
+  .site-badge {
+    font-size: 10px; font-weight: 800; letter-spacing: .8px;
+    padding: 3px 9px; border-radius: 6px; flex-shrink: 0; margin-top: 2px;
+  }
+  .free  { background: rgba(74,222,128,.15); color: #4ade80; border: 1px solid rgba(74,222,128,.3); }
+  .paid  { background: rgba(249,115,22,.12); color: #f97316; border: 1px solid rgba(249,115,22,.3); }
+  .mixed { background: rgba(167,139,250,.12); color: #a78bfa; border: 1px solid rgba(167,139,250,.3); }
+  .site-info .site-name { font-size: 13px; font-weight: 700; color: var(--text); }
+  .site-info .site-desc { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
+
+  /* Folder tree */
+  .folder-tree {
+    background: #080a0f;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    font-family: monospace;
+    font-size: 13px;
+    line-height: 2;
+    overflow-x: auto;
+  }
+  .f-root  { color: #4ade80; font-weight: 700; }
+  .f-l1    { color: #22d3ee; padding-right: 18px; }
+  .f-l2    { color: #a78bfa; padding-right: 36px; }
+  .f-l3    { color: var(--muted); padding-right: 54px; }
+  .f-note  { color: #3a4258; font-size: 11px; }
+
+  /* comparison */
+  .comp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .comp-table th {
+    padding: 10px 12px; text-align: right;
+    font-weight: 700; font-size: 11px; letter-spacing: 1px;
+    color: var(--muted); background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  .comp-table td { padding: 11px 12px; border-bottom: 1px solid var(--border); line-height: 1.5; }
+  .comp-table tr:last-child td { border-bottom: none; }
+  .comp-table .type-cell { font-weight: 700; width: 26%; }
+  .t-sfx   { color: var(--sfx); }
+  .t-foley { color: var(--foley); }
+  .t-amb   { color: var(--amb); }
+
+  .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 32px; }
+  .footer span { color: var(--sfx); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="badge">Sound Design Guide · Premiere Pro</div>
+  <h1>🔊 دليل الـ Sound Design الشامل</h1>
+  <p>SFX · Foley · Ambience — تعريف + إفيكتات Premiere Pro + مواقع + تنظيم الفولدرز</p>
+</div>
+
+
+<!-- ═══════════ SFX ═══════════ -->
+<div class="section-card sfx">
+  <div class="section-header">
+    <div class="section-icon">⚡</div>
+    <div class="section-title-wrap">
+      <h2>Sound Effects — SFX</h2>
+      <p>أصوات مصممة لتضخيم الحدث البصري</p>
+    </div>
+  </div>
+  <div class="section-body">
+
+    <div class="def-box">
+      الـ SFX هي أصوات <strong>مصنوعة أو معدّلة</strong> هدفها الوحيد إنها تضخّم التأثير البصري وتخلّي المشاهد <em>يحسّ</em> باللحظة. مش لازم تكون واقعية خالص — المهم تكون مؤثرة في السياق. في الـ Reels هي الأقوى تأثيرًا على الـ Retention لأنها بتربط الأذن بالعين.
+    </div>
+
+    <div class="sub-label">أمثلة مفصّلة</div>
+    <div class="examples-grid">
+      <span class="tag">Whoosh — انتقالات</span>
+      <span class="tag">Impact Hit — ضربات</span>
+      <span class="tag">Riser — تصاعد</span>
+      <span class="tag">Cinematic Drop</span>
+      <span class="tag">Glitch — تشويش</span>
+      <span class="tag">Zap — كهرباء</span>
+      <span class="tag">Swoosh — حركة</span>
+      <span class="tag">Boom — انفجار</span>
+      <span class="tag">Reverse Whoosh</span>
+      <span class="tag">Tape Stop</span>
+      <span class="tag">Digital Beep</span>
+      <span class="tag">Vinyl Scratch</span>
+    </div>
+
+    <div class="divider"></div>
+    <div class="sub-label">الإفيكتات في Premiere Pro</div>
+    <div class="effects-list">
+
+      <div class="effect-row">
+        <div class="effect-name">Pitch Shifter</div>
+        <div class="effect-path">Audio Effects → Time and Pitch → Pitch Shifter</div>
+        <div class="effect-desc">غيّر الـ Pitch Scale — قيمة موجبة للصوت الأعلى، سالبة للأعمق. الـ Whoosh بيبقى أكثر تأثيرًا بـ -3 إلى -5 semitones. الـ Hits بتبقى أثقل بـ -6.</div>
+        <div class="effect-tip">💡 في: Effect Controls → Pitch Shifter → Pitch: -4 للـ heavy whoosh</div>
+      </div>
+
+      <div class="effect-row">
+        <div class="effect-name">Studio Reverb</div>
+        <div class="effect-path">Audio Effects → Reverb → Studio Reverb</div>
+        <div class="effect-desc">استخدم Decay Time قصير (0.3–0.8s) للـ SFX علشان ما يطولش ويظل Sharp. Room Size صغير (20–30%) يضيف حضور من غير ما يلوّث الـ Mix.</div>
+        <div class="effect-tip">💡 Decay: 0.5s / Room Size: 25% / Dry Mix: 70%</div>
+      </div>
+
+      <div class="effect-row">
+        <div class="effect-name">Parametric Equalizer</div>
+        <div class="effect-path">Audio Effects → Filter and EQ → Parametric Equalizer</div>
+        <div class="effect-desc">للـ Hits: بوست في 60–80Hz (Sub) يضيف الثقل، وبوست في 3–5kHz (Presence) يضيف الحدّة. قطع الـ Mud في 200–400Hz علشان الصوت ينظّف.</div>
+        <div class="effect-tip">💡 Low Shelf +3dB عند 80Hz — High Shelf +2dB عند 8kHz</div>
+      </div>
+
+      <div class="effect-row">
+        <div class="effect-name">Dynamics Processing</div>
+        <div class="effect-path">Audio Effects → Amplitude and Compression → Dynamics</div>
+        <div class="effect-desc">Compressor: Attack 5ms / Release 50ms / Ratio 4:1 — بيخلّي الـ Transient (أول لحظة) واضح وقوي، وبعدين يتحكم في الـ Tail. الـ SFX بتبقى أحدّ وأكثر Punch.</div>
+        <div class="effect-tip">💡 Threshold: -12dB / Ratio: 4:1 / Attack: 5ms</div>
+      </div>
+
+      <div class="effect-row">
+        <div class="effect-name">Delay</div>
+        <div class="effect-path">Audio Effects → Delay and Echo → Delay</div>
+        <div class="effect-desc">Delay Time: 20–40ms (Short Slap) يضيف عمق وامتداد بسيط للـ Transitions بدون ما يبقى واضح كـ Echo. Feedback: 0–10% بس.</div>
+        <div class="effect-tip">💡 مناسب للـ Whoosh على الـ Cuts — مش للـ Hits</div>
+      </div>
+
+      <div class="effect-row">
+        <div class="effect-name">Speed / Duration (لتوقيت الـ SFX)</div>
+        <div class="effect-path">Clip سودوكليك → Speed/Duration → Reverse Speed</div>
+        <div class="effect-desc">الـ Reverse على أي SFX بيخلق Transition مختلف تمامًا — Reverse Whoosh مثلًا بيبقى كـ "سحب" قبل الـ Cut. جرّب تعكس أي صوت عندك.</div>
+        <div class="effect-tip">💡 Right Click على الكليب → Speed/Duration → Reverse Speed ✓</div>
+      </div>
+
+    </div>
+
+    <div class="divider"></div>
+    <div class="sub-label">مستويات الصوت (Audio Levels)</div>
+    <div class="levels-block">
+      <div class="level-row">
+        <span class="level-label">SFX عادي</span>
+        <div class="level-bar-wrap"><div class="level-bar" style="width:68%;background:var(--sfx);"></div></div>
+        <span class="level-val">-12 dB</span>
+      </div>
+      <div class="level-row">
+        <span class="level-label">Big Impact Hit</span>
+        <div class="level-bar-wrap"><div class="level-bar" style="width:88%;background:var(--sfx);"></div></div>
+        <span class="level-val">-6 dB</span>
+      </div>
+      <div class="level-row">
+        <span class="level-label">Transition Whoosh</span>
+        <div class="level-bar-wrap"><div class="level-bar" style="width:52%;background:#fb923c;"></div></div>
+        <span class="level-val">-18 dB</span>
+      </div>
+      <div class="level-row">
+        <span class="level-label">مع Voiceover</span>
+        <div class="level-bar-wrap"><div class="level-bar" style="width:40%;background:#fb923c;"></div></div>
+        <span class="level-val">-20 dB</span>
+      </div>
+    </div>
+
+    <div class="sub-label" style="margin-top:18px">نصايح عملية</div>
+    <div class="tips-list">
+      <div class="tip-item"><div class="tip-dot"></div><span>حط الـ SFX على الـ <strong>Cut Point بالظبط</strong> — فريم قبل أو بعد بيكسر الإحساس</span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span>الـ <strong>Whoosh</strong> ابدأه قبل الـ Cut بـ 2–3 فريم عشان "يمهّد" للانتقال</span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span>الـ <strong>Riser</strong> حطّه قبل الـ Big Reveal أو Drop بـ 1–2 ثانية بالظبط</span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span>الـ Hits متحطّش على <strong>كل حاجة</strong> — اختار اللحظات اللي فيها Impact حقيقي بس</span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span>استخدم الـ <strong>Keyframe</strong> في Premiere عشان تعمل Volume Fade In/Out على كل SFX بدل ما يبدأ فجأة</span></div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ═══════════ FOLEY ═══════════ -->
+<div class="section-card foley">
+  <div class="section-header">
+    <div class="section-icon">🎹</div>
+    <div class="section-title-wrap">
+      <h2>Foley</h2>
+      <p>أصوات واقعية بتضيف الحياة للمشهد</p>
+    </div>
+  </div>
+  <div class="section-body">
+
+    <div class="def-box">
+      الـ Foley هي أصوات <strong>محاكاة للواقع</strong> بتتسجّل أو تتحمّل منفصلة وبتتضاف على المشهد. وظيفتها إنها تخلّي المشاهد يحسّ إنه "في" المحتوى. الكاميرا بتشوف، الـ Foley بتخلّي الـ Brain يصدّق. مهمة جدًا في الـ Educational Content لأنها بتضيف دفا وإنسانية على المحتوى الجاف.
+    </div>
+
+    <div class="sub-label">أمثلة مفصّلة</div>
+    <div class="examples-grid">
+      <span class="tag">Keyboard Typing</span>
+      <span class="tag">Mouse Click</span>
+      <span class="tag">خطوات على أرضية</span>
+      <span class="tag">فتح / قفل باب</span>
+      <span class="tag">ورق بيتقلب</span>
+      <span class="tag">قلم بيكتب</span>
+      <span class="tag">كوباية على تيبل</span>
+      <span class="tag">سحب كرسي</span>
+      <span class="tag">Zipper</span>
+      <span class="tag">Clothes Rustle</span>
+      <span class="tag">Phone Tap</span>
+      <span class="tag">Notebook Open</span>
+    </div>
+
+    <div class="divider"></div>
+    <div class="sub-label">الإفيكتات في Premiere Pro</div>
+    <div class="effects-list">
+
+      <div class="effect-row">
+        <div class="effect-name">Parametric Equalizer — Mid Cut</div>
+        <div class="effect-path">Audio Effects → Filter and EQ → Parametric Equalizer</div>
+        <div class="effect-desc">قطع الـ Harsh Frequencies (2–5kHz) بـ -3 إلى -6dB علشان الـ Foley ما يبقاش "زعيق" وبيمشي تحت الـ Voiceover في راحة. ارفع الـ Air (12kHz+) بسيط للـ Freshness.</div>
+        <div class="effect-tip">💡 Bell Filter عند 3.5kHz: -4dB / Q: 1.5</div>
+      </div>
+
+      <div class="effect-row">
+        <div class="effect-name">High Pass Filter</div>
+        <div class="effect-path">Audio Effects → Filter and EQ → High Pass</div>
+        <div class="effect-desc">قطع كل حاجة تحت 100Hz في الـ Foley — مفيش Foley محتاج Sub Frequencies. ده بيخلّي المجال للـ Music والـ Voiceover يتنفسوا في الـ Low End.</div>
+        <div class="effect-tip">💡 Cutoff: 100Hz / اللي Foley ناعم زي ورق: 80Hz بيكفي</div>
+      </div>
+
+      <div class="effect-row">
+        <div class="effect-name">Studio Reverb — Room Match</div>
+        <div class="effect-path">Audio Effects → Reverb → Studio Reverb</div>
+        <div class="effect-desc">مهم جدًا — خلّي الـ Reverb يتناسب مع المكان اللي التصوير فيه. غرفة صغيرة: Room Size 15–20%, Decay 0.3s. مكان مفتوح: Room Size 40%, Decay 0.8s.</div>
+        <div class="effect-tip">💡 Foley من مكتبة بدون Reverb بيبدو "مصطنع" — لازم تضيف Room Match</div>
+      </div>
+
+      <div class="effect-row">
+        <div class="effect-name">Dynamics — Gentle Compression</div>
+        <div class="effect-path">Audio Effects → Amplitude and Compression → Dynamics</div>
+        <div class="effect-desc">Ratio 2:1 أو 3:1 مع Threshold -18dB — بيخلّي الـ Foley Consistent من غير ما تقتل الـ Natural Dynamics بتاعته. الكيبورد Typing مثلًا بيتفاوت — الـ Compression بيسوّيه.</div>
+        <div class="effect-tip">💡 Ratio: 2:1 / Threshold: -18dB / Attack: 20ms / Release: 100ms</div>
+      </div>
+
+    </div>
+
+    <div class="divider"></div>
+    <div class="sub-label">مستويات الصوت</div>
+    <div class="levels-block">
+      <div class="level-row">
+        <span class="level-label">Foley عادي</span>
+        <div class="level-bar-wrap"><div class="level-bar" style="width:38%;background:var(--foley);"></div></div>
+        <span class="level-val">-24 dB</span>
+      </div>
+      <div class="level-row">
+        <span class="level-label">Foley بارز</span>
+        <div class="level-bar-wrap"><div class="level-bar" style="width:52%;background:var(--foley);"></div></div>
+        <span class="level-val">-18 dB</span>
+      </div>
+      <div class="level-row">
+        <span class="level-label">مع Voiceover</span>
+        <div class="level-bar-wrap"><div class="level-bar" style="width:26%;background:#67e0f5;"></div></div>
+        <span class="level-val">-28 dB</span>
+      </div>
+      <div class="level-row">
+        <span class="level-label">مع Music</span>
+        <div class="level-bar-wrap"><div class="level-bar" style="width:20%;background:#67e0f5;"></div></div>
+        <span class="level-val">-30 dB</span>
+      </div>
+    </div>
+
+    <div class="sub-label" style="margin-top:18px">نصايح عملية</div>
+    <div class="tips-list">
+      <div class="tip-item"><div class="tip-dot"></div><span>الـ Foley دايمًا <strong>Subtle</strong> — المشاهد مش المفروض يسمعه، المفروض يحسّ بيه لو شاله</span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span>صوت الـ Keyboard Typing خلف الشاشة بيقول للمشاهد "في شغل بيتعمل" — بيضيف <strong>Trust</strong></span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span>في Educational Content — Foley بسيط (ورق، قلم) بيضيف <strong>Warmth وإنسانية</strong> على المحتوى</span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span>استخدم الـ <strong>Essential Sound Panel</strong> في Premiere وصنّف الـ Foley كـ "SFX" — هيطبّق Preset تلقائي كويس</span></div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ═══════════ AMBIENCE ═══════════ -->
+<div class="section-card amb">
+  <div class="section-header">
+    <div class="section-icon">🌆</div>
+    <div class="section-title-wrap">
+      <h2>Ambience</h2>
+      <p>صوت المكان — الـ "هواء" اللي بيحيي المشهد</p>
+    </div>
+  </div>
+  <div class="section-body">
+
+    <div class="def-box">
+      الـ Ambience هي الـ <strong>Layer اللي بتحدّد أنت فين</strong> في الـ Video. المكتبة، الشارع، الاستوديو، الطبيعة، الكافيه. من غيرها المشهد بيبقى "في فراغ" حتى لو الصورة واضحة. دي اللي بتبني الـ <em>Emotional Atmosphere</em> كلها تحت الـ Voiceover والـ Music.
+    </div>
+
+    <div class="sub-label">أمثلة مفصّلة</div>
+    <div class="examples-grid">
+      <span class="tag">Coffee Shop Chatter</span>
+      <span class="tag">City Traffic</span>
+      <span class="tag">Office HVAC Hum</span>
+      <span class="tag">Rain on Window</span>
+      <span class="tag">Studio Silence (Room Tone)</span>
+      <span class="tag">Cairo Street Market</span>
+      <span class="tag">Nature — Birds + Wind</span>
+      <span class="tag">Lo-fi Room Tone</span>
+      <span class="tag">Library Quiet</span>
+      <span class="tag">Rooftop Wind</span>
+      <span class="tag">Night Crickets</span>
+      <span class="tag">Cafe Espresso Machine</span>
+    </div>
+
+    <div class="divider"></div>
+    <div class="sub-label">الإفيكتات في Premiere Pro</div>
+    <div class="effects-list">
+
+      <div class="effect-row">
+        <div class="effect-name">Low Pass Filter</div>
+        <div class="effect-path">Audio Effects → Filter and EQ → Low Pass</div>
+        <div class="effect-desc">قطع الـ High Frequencies (فوق 8kHz) علشان الـ Ambience تفضل "بعيدة وخلفية" في الـ Perception ومش بتنافس الـ Voiceover. Cutoff: 6–8kHz.</div>
+        <div class="effect-tip">💡 Cutoff: 7kHz — بيحس المشاهد إن المكان "بعيد" مش في وشه</div>
+      </div>
+
+      <div class="effect-row">
+        <div class="effect-name">Volume Keyframes — Automation</div>
+        <div class="effect-path">Timeline → Show Clip Keyframes → Volume → Level</div>
+        <div class="effect-desc">في Premiere افتح الـ Keyframes على الـ Audio Track وارسم Automation — خفّض الـ Ambience لما يبدأ Voiceover وارفعها في الـ Silence. مش في Effect، في الـ Timeline نفسها.</div>
+        <div class="effect-tip">💡 اعمل Fade Down -6dB لما يبدأ الكلام — Fade Up لما يخلص</div>
+      </div>
+
+      <div class="effect-row">
+        <div class="effect-name">Fill Right with Left (Stereo Widening)</div>
+        <div class="effect-path">Audio Effects → Special → Fill Left with Right / Fill Right with Left</div>
+        <div class="effect-desc">لو الـ Ambience Mono — استخدم الإفيكت ده عشان تعمله Pseudo-Stereo. بيضيف عرض واضح في الـ Stereo Field علشان الـ Ambience تحيط بالمشاهد من كل الجهات.</div>
+        <div class="effect-tip">💡 بعده حط Dynamics عشان تتحكم في الـ Level</div>
+      </div>
+
+      <div class="effect-row">
+        <div class="effect-name">Hard Limiter</div>
+        <div class="effect-path">Audio Effects → Amplitude and Compression → Hard Limiter</div>
+        <div class="effect-desc">Maximum Amplitude: -12dB للـ Ambience — يضمن إنها ما بتعلاش فجأة في أي لحظة في الـ Track. مهم لو الـ Ambience فيها peaks مختلفة (زي مرور عربية فجأة).</div>
+        <div class="effect-tip">💡 Input Boost: 0dB / Maximum Amplitude: -12dB</div>
+      </div>
+
+    </div>
+
+    <div class="divider"></div>
+    <div class="sub-label">مستويات الصوت</div>
+    <div class="levels-block">
+      <div class="level-row">
+        <span class="level-label">خلف Voiceover</span>
+        <div class="level-bar-wrap"><div class="level-bar" style="width:22%;background:var(--amb);"></div></div>
+        <span class="level-val">-30 dB</span>
+      </div>
+      <div class="level-row">
+        <span class="level-label">خلف Music</span>
+        <div class="level-bar-wrap"><div class="level-bar" style="width:30%;background:var(--amb);"></div></div>
+        <span class="level-val">-26 dB</span>
+      </div>
+      <div class="level-row">
+        <span class="level-label">مشهد بدون كلام</span>
+        <div class="level-bar-wrap"><div class="level-bar" style="width:48%;background:var(--amb);"></div></div>
+        <span class="level-val">-20 dB</span>
+      </div>
+      <div class="level-row">
+        <span class="level-label">وحدها (Ambience Scene)</span>
+        <div class="level-bar-wrap"><div class="level-bar" style="width:62%;background:#c4b0fd;"></div></div>
+        <span class="level-val">-14 dB</span>
+      </div>
+    </div>
+
+    <div class="sub-label" style="margin-top:18px">نصايح عملية</div>
+    <div class="tips-list">
+      <div class="tip-item"><div class="tip-dot"></div><span>الـ Ambience لازم تكون موجودة <strong>حتى لو ما تسمعهاش</strong> — غيابها بيحسّسك بالفراغ فورًا</span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span>في الـ Reels — Lo-fi Room Tone أو Coffee Shop Ambience خلف الـ Voiceover بتضيف <strong>دفا وراحة</strong></span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span><strong>غيّر الـ Ambience</strong> مع كل Scene Change — المشاهد بيحسّ بالانتقال حتى قبل ما يشوفه بالعين</span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span>الـ <strong>Room Tone</strong> (سكوت الاستوديو) مهم جدًا — سجّل 10 ثواني صمت في أي مكان بتصور فيه عشان تملا الـ Gaps</span></div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ═══════════ SITES ═══════════ -->
+<div class="section-card">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(249,115,22,.1);font-size:20px;">🌐</div>
+    <div class="section-title-wrap">
+      <h2 style="color:#e8eaf0;">مواقع التحميل</h2>
+      <p>أفضل مصادر لـ SFX · Foley · Ambience</p>
+    </div>
+  </div>
+  <div class="section-body">
+
+    <div class="sub-label">مجانية 100%</div>
+    <div class="sites-grid">
+      <div class="site-row">
+        <span class="site-badge free">FREE</span>
+        <div class="site-info">
+          <div class="site-name">Pixabay — pixabay.com/sound-effects</div>
+          <div class="site-desc">مكتبة ضخمة من SFX وأصوات بيئة. مجانية تجاريًا. فلترة ممتازة بـ Category. الأكثر استخدامًا للمبتدئين.</div>
+        </div>
+      </div>
+      <div class="site-row">
+        <span class="site-badge free">FREE</span>
+        <div class="site-info">
+          <div class="site-name">Freesound — freesound.org</div>
+          <div class="site-desc">أضخم مكتبة Community-Based. فيها ملايين صوت مسجّل من ناس حول العالم. Foley وAmbience عالية الجودة. بعض الأصوات تحتاج Attribution.</div>
+        </div>
+      </div>
+      <div class="site-row">
+        <span class="site-badge free">FREE</span>
+        <div class="site-info">
+          <div class="site-name">ZapSplat — zapsplat.com</div>
+          <div class="site-desc">مكتبة منظمة بشكل ممتاز — SFX وFoley وAmbience كلها. Free Account: تحميل بـ watermark / Premium: بدون watermark ومحدودش.</div>
+        </div>
+      </div>
+      <div class="site-row">
+        <span class="site-badge free">FREE</span>
+        <div class="site-info">
+          <div class="site-name">BBC Sound Effects — sound-effects.bbcrewind.co.uk</div>
+          <div class="site-desc">مكتبة BBC الرسمية — 16,000+ صوت احترافي. Ambience من حول العالم. للاستخدام غير التجاري فقط. جودة استوديو حقيقية.</div>
+        </div>
+      </div>
+      <div class="site-row">
+        <span class="site-badge free">FREE</span>
+        <div class="site-info">
+          <div class="site-name">OpenGameArt — opengameart.org</div>
+          <div class="site-desc">مكتبة SFX مفتوحة المصدر. الأصوات الرقمية والـ Glitch والـ Sci-Fi فيها كتير ومتنوعة.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-label" style="margin-top:18px">مدفوعة / مختلطة (الأفضل جودة)</div>
+    <div class="sites-grid">
+      <div class="site-row">
+        <span class="site-badge mixed">MIXED</span>
+        <div class="site-info">
+          <div class="site-name">Epidemic Sound — epidemicsound.com</div>
+          <div class="site-desc">الأفضل للكريتورز — اشتراك شهري يشمل Music + SFX + Ambience. License تجاري شامل. فلترة بـ Mood وCategory. الأكثر استخدامًا من الكريتورز المحترفين.</div>
+        </div>
+      </div>
+      <div class="site-row">
+        <span class="site-badge mixed">MIXED</span>
+        <div class="site-info">
+          <div class="site-name">Artlist — artlist.io</div>
+          <div class="site-desc">Music + SFX بـ License سنوي. SFX Pack منفصل (~$9/شهر). الجودة أعلى من Epidemic. License يشمل كل المنصات بدون قيود.</div>
+        </div>
+      </div>
+      <div class="site-row">
+        <span class="site-badge paid">PAID</span>
+        <div class="site-info">
+          <div class="site-name">SoundSnap — soundsnap.com</div>
+          <div class="site-desc">مكتبة SFX احترافية بحتة. أصوات Cinematic وFoley بجودة Hollywood. Credits System — تدفع على حسب الاستخدام.</div>
+        </div>
+      </div>
+      <div class="site-row">
+        <span class="site-badge paid">PAID</span>
+        <div class="site-info">
+          <div class="site-name">Pond5 — pond5.com</div>
+          <div class="site-desc">Market ضخم — SFX وFoley وAmbience بالقطعة. بعض الأصوات من $1. الأفضل لو محتاج صوت محدد جدًا مش لاقيه في مكان تاني.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ═══════════ FOLDERS ═══════════ -->
+<div class="section-card org">
+  <div class="section-header">
+    <div class="section-icon">📁</div>
+    <div class="section-title-wrap">
+      <h2>تنظيم الفولدرز</h2>
+      <p>System احترافي لتخزين الـ Sound Library</p>
+    </div>
+  </div>
+  <div class="section-body">
+
+    <div class="def-box">
+      تنظيم الـ Sound Library صح بيوفّر عليك وقت ومجهود كبير في كل مشروع. الهدف إنك <strong>توصل لأي صوت في 10 ثواني</strong> — مش تدور في ملفات مبعثرة.
+    </div>
+
+    <div class="sub-label">هيكل الفولدرز المقترح</div>
+    <div class="folder-tree">
+<span class="f-root">📁 Sound Library</span>
+<br>
+<span class="f-l1">├── 📁 01_SFX</span>
+<br>
+<span class="f-l2">│   ├── 📁 Whoosh</span>
+<br>
+<span class="f-l3">│   │   ├── whoosh_heavy_01.wav</span>
+<br>
+<span class="f-l3">│   │   └── whoosh_soft_02.wav</span>
+<br>
+<span class="f-l2">│   ├── 📁 Hits &amp; Impacts</span>
+<br>
+<span class="f-l3">│   │   ├── impact_cinematic_01.wav</span>
+<br>
+<span class="f-l3">│   │   └── hit_punch_03.wav</span>
+<br>
+<span class="f-l2">│   ├── 📁 Risers &amp; Drops</span>
+<br>
+<span class="f-l2">│   ├── 📁 Transitions</span>
+<br>
+<span class="f-l2">│   ├── 📁 Glitch &amp; Digital</span>
+<br>
+<span class="f-l2">│   └── 📁 Misc SFX</span>
+<br>
+<br>
+<span class="f-l1">├── 📁 02_Foley</span>
+<br>
+<span class="f-l2">│   ├── 📁 Keyboard &amp; Mouse</span>
+<br>
+<span class="f-l2">│   ├── 📁 Footsteps</span>
+<br>
+<span class="f-l3">│   │   ├── footsteps_wood_01.wav</span>
+<br>
+<span class="f-l3">│   │   └── footsteps_concrete_02.wav</span>
+<br>
+<span class="f-l2">│   ├── 📁 Doors &amp; Objects</span>
+<br>
+<span class="f-l2">│   └── 📁 Paper &amp; Writing</span>
+<br>
+<br>
+<span class="f-l1">├── 📁 03_Ambience</span>
+<br>
+<span class="f-l2">│   ├── 📁 Indoor</span>
+<br>
+<span class="f-l3">│   │   ├── cafe_morning_01.wav</span>
+<br>
+<span class="f-l3">│   │   └── office_hum_02.wav</span>
+<br>
+<span class="f-l2">│   ├── 📁 Outdoor</span>
+<br>
+<span class="f-l3">│   │   ├── street_cairo_01.wav</span>
+<br>
+<span class="f-l3">│   │   └── rain_window_03.wav</span>
+<br>
+<span class="f-l2">│   ├── 📁 Nature</span>
+<br>
+<span class="f-l2">│   └── 📁 Lo-fi &amp; Room Tone</span>
+<br>
+<br>
+<span class="f-l1">├── 📁 04_Music</span>
+<br>
+<span class="f-l2">│   ├── 📁 Upbeat</span>
+<br>
+<span class="f-l2">│   ├── 📁 Emotional</span>
+<br>
+<span class="f-l2">│   ├── 📁 Lo-fi</span>
+<br>
+<span class="f-l2">│   └── 📁 No Copyright</span>
+<br>
+<br>
+<span class="f-l1">└── 📁 05_Favorites</span>
+<br>
+<span class="f-l2">    ├── 📁 Reels Pack</span>
+<br>
+<span class="f-l2">    └── 📁 Go-To Sounds</span>
+<br>
+<span class="f-note">    <em>← الأصوات اللي بتستخدمها كتير — اعمل Shortcut ليها</em></span>
+    </div>
+
+    <div class="sub-label" style="margin-top:20px">قواعد التسمية</div>
+    <div class="tips-list">
+      <div class="tip-item"><div class="tip-dot"></div><span><strong>اسم الصوت + وصف + رقم</strong> — مثال: <code>whoosh_heavy_01.wav</code> / <code>impact_cinematic_02.wav</code></span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span>ما تستخدمش مسافات في الاسم — استخدم <strong>underscore _</strong> دايمًا</span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span>خزّن بـ <strong>.WAV</strong> مش MP3 — جودة أعلى وما فيهاش Compression يأثر على الـ Mix</span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span>فولدر <strong>05_Favorites / Reels Pack</strong> — حط فيه الأصوات اللي بتستخدمها في كل Reel تقريبًا عشان توصالها بسرعة</span></div>
+      <div class="tip-item"><div class="tip-dot"></div><span>في Premiere — اعمل <strong>Custom Bin</strong> بنفس الهيكل ده في الـ Project Panel عشان توصل للصوت من جوه البرنامج مباشرة</span></div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ═══════════ COMPARISON ═══════════ -->
+<div class="section-card">
+  <div class="section-header">
+    <div class="section-icon" style="background:#1a2235;font-size:18px;">📊</div>
+    <div class="section-title-wrap">
+      <h2 style="color:#e8eaf0;">مقارنة سريعة</h2>
+      <p>الفرق بين الأنواع الثلاثة في ثوانٍ</p>
+    </div>
+  </div>
+  <div class="section-body" style="padding:0;">
+    <table class="comp-table">
+      <thead>
+        <tr>
+          <th>النوع</th>
+          <th>الوظيفة</th>
+          <th>المستوى</th>
+          <th>الحضور</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="type-cell t-sfx">⚡ SFX</td>
+          <td>يضخّم الحدث البصري</td>
+          <td>-6 إلى -18 dB</td>
+          <td>مسموع ومقصود</td>
+        </tr>
+        <tr>
+          <td class="type-cell t-foley">🎹 Foley</td>
+          <td>يضيف واقعية وحياة</td>
+          <td>-18 إلى -30 dB</td>
+          <td>محسوس مش مسموع</td>
+        </tr>
+        <tr>
+          <td class="type-cell t-amb">🌆 Ambience</td>
+          <td>يبني الـ Atmosphere</td>
+          <td>-20 إلى -30 dB</td>
+          <td>في الخلفية دايمًا</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="footer">
+  by <span>Reelmaster</span> · كل فريم فن ✦
+</div>
+
+</body>
+</html>
