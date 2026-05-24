@@ -6,17 +6,19 @@
   <title>منصة التعلم</title>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
-  <!-- Firebase CDN -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
-      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, collection, addDoc, getDocs, getDoc, doc,
-      updateDoc, deleteDoc, query, orderBy, serverTimestamp, where }
-      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import {
+      getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+      signOut, onAuthStateChanged, updateProfile
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import {
+      getFirestore, collection, addDoc, getDocs, doc,
+      updateDoc, deleteDoc, query, orderBy, serverTimestamp, where
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     /* ============================================================
-       🔥 FIREBASE CONFIG — ضع إعدادات Firebase الخاصة بك هنا
+       🔥 FIREBASE CONFIG
     ============================================================ */
     const firebaseConfig = {
       apiKey: "AIzaSyBDjbkPEBmDv49NmCESLNdU3hyM1rOui9M",
@@ -28,21 +30,20 @@
     };
 
     /* ============================================================
-       👑 ADMIN EMAIL — غيّر هذا الإيميل لإيميل الأدمن الخاص بك
+       👑 ADMIN EMAIL
     ============================================================ */
     const ADMIN_EMAIL = "kevin.hany.08@hotmail.com";
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
+    const app   = initializeApp(firebaseConfig);
+    const auth  = getAuth(app);
+    const db    = getFirestore(app);
 
     /* ===================== STATE ===================== */
-    let currentUser = null;
-    let isAdmin = false;
-    let allPosts = [];
-    let currentPost = null;
+    let currentUser  = null;
+    let isAdmin      = false;
+    let allPosts     = [];
     let editingPostId = null;
-    let currentView = "home"; // home | post | dashboard | login
+    let currentView  = "home";
 
     /* ===================== ROUTER ===================== */
     function showView(view, data = null) {
@@ -50,49 +51,102 @@
       document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
       const el = document.getElementById("view-" + view);
       if (el) el.classList.add("active");
-
       window.scrollTo({ top: 0, behavior: "smooth" });
-
-      if (view === "home") renderHome();
-      if (view === "post" && data) renderPost(data);
+      if (view === "home")      renderHome();
+      if (view === "post")      renderPost(data);
       if (view === "dashboard") renderDashboard();
-      if (view === "login") renderLoginView();
     }
 
-    /* ===================== AUTH ===================== */
+    /* ===================== AUTH STATE ===================== */
     onAuthStateChanged(auth, user => {
       currentUser = user;
-      isAdmin = user && user.email === ADMIN_EMAIL;
-      updateNavbar();
-      if (currentView === "login" && user) showView("home");
-      if (currentView === "dashboard" && !isAdmin) showView("home");
+      isAdmin = !!(user && user.email === ADMIN_EMAIL);
+      renderNavbar();
     });
 
-    function updateNavbar() {
-      const loginBtn = document.getElementById("nav-login-btn");
-      const logoutBtn = document.getElementById("nav-logout-btn");
-      const dashBtn = document.getElementById("nav-dash-btn");
-      if (loginBtn) loginBtn.style.display = currentUser ? "none" : "flex";
-      if (logoutBtn) logoutBtn.style.display = currentUser ? "flex" : "none";
-      if (dashBtn) dashBtn.style.display = isAdmin ? "flex" : "none";
+    /* ===================== NAVBAR ===================== */
+    function renderNavbar() {
+      const right = document.getElementById("nav-right");
+      if (!right) return;
+
+      if (currentUser) {
+        const avatar = currentUser.displayName
+          ? currentUser.displayName.charAt(0).toUpperCase()
+          : "؟";
+        right.innerHTML = `
+          ${isAdmin ? `<button class="btn btn-ghost btn-sm" onclick="window._go('dashboard')">⚙️ لوحة التحكم</button>` : ""}
+          <div class="nav-user">
+            <div class="avatar">${avatar}</div>
+            <span class="nav-username">${currentUser.displayName || "مستخدم"}</span>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="btn-logout">خروج</button>
+        `;
+        document.getElementById("btn-logout")?.addEventListener("click", handleLogout);
+      } else {
+        right.innerHTML = `
+          <button class="btn btn-ghost btn-sm" onclick="window._showAuthModal('login')">دخول</button>
+          <button class="btn btn-primary btn-sm" onclick="window._showAuthModal('register')">إنشاء حساب</button>
+        `;
+      }
+    }
+
+    /* ===================== AUTH MODAL ===================== */
+    window._showAuthModal = function(tab) {
+      document.getElementById("auth-modal").classList.add("active");
+      switchAuthTab(tab);
+    };
+
+    function switchAuthTab(tab) {
+      document.getElementById("auth-tab-login").classList.toggle("active-tab", tab === "login");
+      document.getElementById("auth-tab-register").classList.toggle("active-tab", tab === "register");
+      document.getElementById("auth-panel-login").style.display    = tab === "login"    ? "block" : "none";
+      document.getElementById("auth-panel-register").style.display = tab === "register" ? "block" : "none";
+      document.getElementById("auth-error").textContent = "";
+    }
+
+    function closeAuthModal() {
+      document.getElementById("auth-modal").classList.remove("active");
+      document.getElementById("login-email").value = "";
+      document.getElementById("login-pass").value  = "";
+      document.getElementById("reg-name").value    = "";
+      document.getElementById("reg-email").value   = "";
+      document.getElementById("reg-pass").value    = "";
+      document.getElementById("auth-error").textContent = "";
     }
 
     async function handleLogin(e) {
       e.preventDefault();
       const email = document.getElementById("login-email").value.trim();
-      const pass = document.getElementById("login-pass").value;
-      const errEl = document.getElementById("login-error");
-      errEl.textContent = "";
+      const pass  = document.getElementById("login-pass").value;
+      const err   = document.getElementById("auth-error");
+      err.textContent = "";
       try {
         await signInWithEmailAndPassword(auth, email, pass);
-        if (email !== ADMIN_EMAIL) {
-          await auth.signOut();
-          errEl.textContent = "⛔ هذا الحساب ليس أدمن.";
-          return;
-        }
-        showView("dashboard");
-      } catch (err) {
-        errEl.textContent = "❌ بيانات خاطئة، تحقق من الإيميل وكلمة المرور.";
+        closeAuthModal();
+        if (email === ADMIN_EMAIL) showView("dashboard");
+      } catch {
+        err.textContent = "❌ بيانات خاطئة، تحقق من الإيميل وكلمة المرور.";
+      }
+    }
+
+    async function handleRegister(e) {
+      e.preventDefault();
+      const name  = document.getElementById("reg-name").value.trim();
+      const email = document.getElementById("reg-email").value.trim();
+      const pass  = document.getElementById("reg-pass").value;
+      const err   = document.getElementById("auth-error");
+      err.textContent = "";
+      if (!name) { err.textContent = "❌ من فضلك اكتب اسمك."; return; }
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, email, pass);
+        await updateProfile(cred.user, { displayName: name });
+        currentUser = cred.user;
+        renderNavbar();
+        closeAuthModal();
+      } catch (ex) {
+        if (ex.code === "auth/email-already-in-use") err.textContent = "❌ الإيميل ده مستخدم بالفعل.";
+        else if (ex.code === "auth/weak-password")   err.textContent = "❌ كلمة المرور أقل من 6 أحرف.";
+        else err.textContent = "❌ حدث خطأ، حاول مرة أخرى.";
       }
     }
 
@@ -101,58 +155,35 @@
       showView("home");
     }
 
-    /* ===================== POSTS CRUD ===================== */
-    async function loadPosts(publishedOnly = true) {
+    /* ===================== POSTS ===================== */
+    async function loadPosts(all = false) {
       try {
-        let q;
-        if (publishedOnly) {
-          q = query(collection(db, "posts"), where("published", "==", true), orderBy("createdAt", "desc"));
-        } else {
-          q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
-        }
+        let q = all
+          ? query(collection(db, "posts"), orderBy("createdAt", "desc"))
+          : query(collection(db, "posts"), where("published","==",true), orderBy("createdAt","desc"));
         const snap = await getDocs(q);
         allPosts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         return allPosts;
-      } catch (err) {
-        console.error(err);
-        return [];
-      }
+      } catch { return []; }
     }
 
-    async function savePost(postData, id = null) {
-      if (id) {
-        await updateDoc(doc(db, "posts", id), { ...postData, updatedAt: serverTimestamp() });
-      } else {
-        await addDoc(collection(db, "posts"), { ...postData, createdAt: serverTimestamp() });
-      }
+    async function savePost(data, id = null) {
+      if (id) await updateDoc(doc(db,"posts",id), { ...data, updatedAt: serverTimestamp() });
+      else    await addDoc(collection(db,"posts"), { ...data, createdAt: serverTimestamp() });
     }
 
-    async function deletePost(id) {
-      await deleteDoc(doc(db, "posts", id));
-    }
+    async function deletePost(id)                { await deleteDoc(doc(db,"posts",id)); }
+    async function togglePublish(id, cur)        { await updateDoc(doc(db,"posts",id),{ published: !cur }); }
 
-    async function togglePublish(id, current) {
-      await updateDoc(doc(db, "posts", id), { published: !current });
-    }
-
-    /* ===================== SUBSCRIBERS ===================== */
-    async function subscribe(email) {
-      const q = query(collection(db, "subscribers"), where("email", "==", email));
-      const snap = await getDocs(q);
-      if (!snap.empty) return "exists";
-      await addDoc(collection(db, "subscribers"), { email, subscribedAt: serverTimestamp() });
-      return "ok";
-    }
-
-    /* ===================== HOME VIEW ===================== */
+    /* ===================== HOME ===================== */
     async function renderHome() {
-      const grid = document.getElementById("posts-grid");
+      const grid   = document.getElementById("posts-grid");
       const loader = document.getElementById("posts-loader");
       if (!grid) return;
       grid.innerHTML = "";
-      if (loader) loader.style.display = "flex";
-      const posts = await loadPosts(true);
-      if (loader) loader.style.display = "none";
+      loader.style.display = "flex";
+      const posts = await loadPosts(false);
+      loader.style.display = "none";
 
       if (!posts.length) {
         grid.innerHTML = `<div class="empty-state"><div class="empty-icon">📚</div><p>لا توجد مقالات منشورة بعد</p></div>`;
@@ -160,89 +191,73 @@
       }
 
       const grouped = {};
-      posts.forEach(p => {
-        const cat = p.category || "عام";
-        if (!grouped[cat]) grouped[cat] = [];
-        grouped[cat].push(p);
-      });
+      posts.forEach(p => { const c = p.category||"عام"; if(!grouped[c]) grouped[c]=[]; grouped[c].push(p); });
 
       Object.entries(grouped).forEach(([cat, items]) => {
-        const section = document.createElement("div");
-        section.className = "category-section";
-        section.innerHTML = `<h2 class="category-title"><span>${cat}</span></h2>`;
-        const cardGrid = document.createElement("div");
-        cardGrid.className = "cards-grid";
-        items.forEach(post => {
-          const card = buildCard(post);
-          cardGrid.appendChild(card);
-        });
-        section.appendChild(cardGrid);
-        grid.appendChild(section);
+        const sec = document.createElement("div");
+        sec.className = "category-section";
+        sec.innerHTML = `<h2 class="category-title"><span>${cat}</span></h2>`;
+        const cg = document.createElement("div");
+        cg.className = "cards-grid";
+        items.forEach(p => cg.appendChild(buildCard(p)));
+        sec.appendChild(cg);
+        grid.appendChild(sec);
       });
     }
 
     function buildCard(post) {
       const card = document.createElement("div");
       card.className = "post-card";
-      const tags = (post.tags || []).map(t => `<span class="tag">${t}</span>`).join("");
+      const tags = (post.tags||[]).map(t=>`<span class="tag">${t}</span>`).join("");
       card.innerHTML = `
         <div class="card-header">
-          <span class="card-icon">${post.icon || "📄"}</span>
-          <span class="card-category">${post.category || "عام"}</span>
+          <span class="card-icon">${post.icon||"📄"}</span>
+          <span class="card-category">${post.category||"عام"}</span>
         </div>
-        <h3 class="card-title">${post.title || "بدون عنوان"}</h3>
-        <p class="card-subtitle">${post.subtitle || ""}</p>
+        <h3 class="card-title">${post.title||"بدون عنوان"}</h3>
+        <p class="card-subtitle">${post.subtitle||""}</p>
         <div class="card-footer">
           <div class="tags-row">${tags}</div>
-          <span class="read-time">⏱ ${post.readTime || "5"} دقائق</span>
-        </div>
-      `;
+          <span class="read-time">⏱ ${post.readTime||"5"} دقائق</span>
+        </div>`;
       card.addEventListener("click", () => showView("post", post));
       return card;
     }
 
-    /* ===================== SINGLE POST VIEW ===================== */
+    /* ===================== SINGLE POST ===================== */
     function renderPost(post) {
-      currentPost = post;
-      const container = document.getElementById("post-content");
-      if (!container) return;
-      const tags = (post.tags || []).map(t => `<span class="tag">${t}</span>`).join("");
+      const c = document.getElementById("post-content");
+      if (!c) return;
+      const tags = (post.tags||[]).map(t=>`<span class="tag">${t}</span>`).join("");
       const date = post.createdAt?.toDate
-        ? post.createdAt.toDate().toLocaleDateString("ar-EG", { year: "numeric", month: "long", day: "numeric" })
+        ? post.createdAt.toDate().toLocaleDateString("ar-EG",{year:"numeric",month:"long",day:"numeric"})
         : "";
-
-      container.innerHTML = `
+      c.innerHTML = `
         <div class="post-header-meta">
-          <span class="post-icon-big">${post.icon || "📄"}</span>
-          <span class="post-cat-badge">${post.category || "عام"}</span>
+          <span class="post-icon-big">${post.icon||"📄"}</span>
+          <span class="post-cat-badge">${post.category||"عام"}</span>
         </div>
-        <h1 class="post-title gradient-text">${post.title || ""}</h1>
-        <p class="post-subtitle">${post.subtitle || ""}</p>
+        <h1 class="post-title gradient-text">${post.title||""}</h1>
+        <p class="post-subtitle-text">${post.subtitle||""}</p>
         <div class="post-meta-row">
-          <span>📅 ${date}</span>
-          <span>⏱ ${post.readTime || "5"} دقائق قراءة</span>
+          ${date ? `<span>📅 ${date}</span>` : ""}
+          <span>⏱ ${post.readTime||"5"} دقائق قراءة</span>
         </div>
         <div class="tags-row post-tags">${tags}</div>
-        <hr class="post-divider" />
-        <div class="post-body">${post.content || ""}</div>
-      `;
-    }
-
-    /* ===================== LOGIN VIEW ===================== */
-    function renderLoginView() {
-      // static, already in HTML
+        <hr class="post-divider"/>
+        <div class="post-body">${post.content||""}</div>`;
     }
 
     /* ===================== DASHBOARD ===================== */
     async function renderDashboard() {
       if (!isAdmin) { showView("home"); return; }
-      const posts = await loadPosts(false);
-      const list = document.getElementById("dash-posts-list");
+      const posts = await loadPosts(true);
+      const list  = document.getElementById("dash-posts-list");
       if (!list) return;
       list.innerHTML = "";
 
       if (!posts.length) {
-        list.innerHTML = `<div class="empty-state"><p>لا توجد مقالات بعد</p></div>`;
+        list.innerHTML = `<div class="empty-state"><p>لا توجد مقالات بعد، اضغط "مقال جديد"</p></div>`;
         return;
       }
 
@@ -251,1025 +266,456 @@
         item.className = "dash-post-item";
         item.innerHTML = `
           <div class="dash-post-info">
-            <span class="dash-post-icon">${post.icon || "📄"}</span>
+            <span class="dash-post-icon">${post.icon||"📄"}</span>
             <div>
-              <div class="dash-post-title">${post.title || "بدون عنوان"}</div>
-              <div class="dash-post-cat">${post.category || "عام"} • ${post.readTime || "5"} دقائق</div>
+              <div class="dash-post-title">${post.title||"بدون عنوان"}</div>
+              <div class="dash-post-cat">${post.category||"عام"} • ${post.readTime||"5"} دقائق</div>
             </div>
           </div>
-          <div class="dash-post-status">
-            <span class="status-badge ${post.published ? "published" : "draft"}">${post.published ? "منشور" : "مسودة"}</span>
-          </div>
+          <span class="status-badge ${post.published?"published":"draft"}">${post.published?"منشور":"مسودة"}</span>
           <div class="dash-actions">
-            <button class="btn-icon btn-preview" title="معاينة" data-id="${post.id}">👁</button>
-            <button class="btn-icon btn-publish ${post.published ? "btn-unpublish" : "btn-pub"}" title="${post.published ? "إلغاء النشر" : "نشر"}" data-id="${post.id}" data-pub="${post.published}">
-              ${post.published ? "🔒" : "🚀"}
-            </button>
-            <button class="btn-icon btn-edit" title="تعديل" data-id="${post.id}">✏️</button>
-            <button class="btn-icon btn-delete" title="حذف" data-id="${post.id}">🗑</button>
-          </div>
-        `;
+            <button class="btn-icon" title="معاينة"        data-act="preview" data-id="${post.id}">👁</button>
+            <button class="btn-icon" title="${post.published?"إلغاء النشر":"نشر"}" data-act="pub" data-id="${post.id}" data-pub="${post.published}">${post.published?"🔒":"🚀"}</button>
+            <button class="btn-icon" title="تعديل"         data-act="edit"    data-id="${post.id}">✏️</button>
+            <button class="btn-icon btn-del" title="حذف"   data-act="delete"  data-id="${post.id}">🗑</button>
+          </div>`;
         list.appendChild(item);
       });
 
-      // Event delegation
-      list.querySelectorAll(".btn-preview").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const p = allPosts.find(x => x.id === btn.dataset.id);
-          if (p) showView("post", p);
-        });
-      });
-      list.querySelectorAll(".btn-publish").forEach(btn => {
-        btn.addEventListener("click", async () => {
-          await togglePublish(btn.dataset.id, btn.dataset.pub === "true");
-          renderDashboard();
-        });
-      });
-      list.querySelectorAll(".btn-edit").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const p = allPosts.find(x => x.id === btn.dataset.id);
-          if (p) openPostEditor(p);
-        });
-      });
-      list.querySelectorAll(".btn-delete").forEach(btn => {
-        btn.addEventListener("click", async () => {
-          if (confirm("هل تريد حذف هذا المقال؟")) {
-            await deletePost(btn.dataset.id);
-            renderDashboard();
-          }
-        });
+      list.addEventListener("click", async e => {
+        const btn = e.target.closest("[data-act]");
+        if (!btn) return;
+        const { act, id, pub } = btn.dataset;
+        const post = allPosts.find(x => x.id === id);
+        if (act === "preview") { showView("post", post); }
+        if (act === "pub")     { await togglePublish(id, pub==="true"); renderDashboard(); }
+        if (act === "edit")    { openEditor(post); }
+        if (act === "delete")  { if(confirm("حذف هذا المقال؟")) { await deletePost(id); renderDashboard(); } }
       });
     }
 
-    /* ===================== POST EDITOR ===================== */
-    function openPostEditor(post = null) {
-      editingPostId = post ? post.id : null;
-      const modal = document.getElementById("editor-modal");
-      if (!modal) return;
-
-      document.getElementById("editor-title").textContent = post ? "تعديل المقال" : "مقال جديد";
-      document.getElementById("field-title").value = post?.title || "";
-      document.getElementById("field-subtitle").value = post?.subtitle || "";
-      document.getElementById("field-category").value = post?.category || "";
-      document.getElementById("field-icon").value = post?.icon || "📄";
-      document.getElementById("field-tags").value = (post?.tags || []).join(", ");
-      document.getElementById("field-readtime").value = post?.readTime || "5";
-      document.getElementById("field-content").value = post?.content || "";
-      document.getElementById("field-published").checked = post?.published || false;
-
-      modal.classList.add("active");
+    /* ===================== EDITOR ===================== */
+    function openEditor(post = null) {
+      editingPostId = post?.id || null;
+      document.getElementById("editor-heading").textContent = post ? "تعديل المقال" : "مقال جديد";
+      document.getElementById("f-title").value      = post?.title    || "";
+      document.getElementById("f-subtitle").value   = post?.subtitle || "";
+      document.getElementById("f-category").value   = post?.category || "";
+      document.getElementById("f-icon").value       = post?.icon     || "📄";
+      document.getElementById("f-tags").value       = (post?.tags||[]).join(", ");
+      document.getElementById("f-readtime").value   = post?.readTime || "5";
+      document.getElementById("f-content").value    = post?.content  || "";
+      document.getElementById("f-published").checked = post?.published || false;
+      document.getElementById("editor-modal").classList.add("active");
     }
 
     function closeEditor() {
-      const modal = document.getElementById("editor-modal");
-      if (modal) modal.classList.remove("active");
+      document.getElementById("editor-modal").classList.remove("active");
       editingPostId = null;
     }
 
     async function handleSavePost(e) {
       e.preventDefault();
       const btn = document.getElementById("btn-save-post");
-      btn.disabled = true;
-      btn.textContent = "جارٍ الحفظ...";
-
-      const tagsRaw = document.getElementById("field-tags").value;
-      const tags = tagsRaw.split(",").map(t => t.trim()).filter(Boolean);
-
+      btn.disabled = true; btn.textContent = "جارٍ الحفظ...";
+      const tags = document.getElementById("f-tags").value.split(",").map(t=>t.trim()).filter(Boolean);
       const data = {
-        title: document.getElementById("field-title").value.trim(),
-        subtitle: document.getElementById("field-subtitle").value.trim(),
-        category: document.getElementById("field-category").value.trim(),
-        icon: document.getElementById("field-icon").value.trim(),
+        title:     document.getElementById("f-title").value.trim(),
+        subtitle:  document.getElementById("f-subtitle").value.trim(),
+        category:  document.getElementById("f-category").value.trim(),
+        icon:      document.getElementById("f-icon").value.trim(),
         tags,
-        readTime: document.getElementById("field-readtime").value.trim(),
-        content: document.getElementById("field-content").value,
-        published: document.getElementById("field-published").checked,
+        readTime:  document.getElementById("f-readtime").value.trim(),
+        content:   document.getElementById("f-content").value,
+        published: document.getElementById("f-published").checked,
       };
-
       try {
         await savePost(data, editingPostId);
-        closeEditor();
-        renderDashboard();
-      } catch (err) {
-        alert("حدث خطأ أثناء الحفظ: " + err.message);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "💾 حفظ المقال";
-      }
-    }
-
-    /* ===================== SUBSCRIBE ===================== */
-    async function handleSubscribe(e) {
-      e.preventDefault();
-      const emailEl = document.getElementById("sub-email");
-      const msgEl = document.getElementById("sub-msg");
-      const email = emailEl.value.trim();
-      if (!email) return;
-      msgEl.textContent = "جارٍ التسجيل...";
-      msgEl.className = "sub-msg";
-      try {
-        const result = await subscribe(email);
-        if (result === "exists") {
-          msgEl.textContent = "✅ أنت مسجل بالفعل!";
-        } else {
-          msgEl.textContent = "🎉 تم التسجيل بنجاح! سنعلمك بكل جديد.";
-          emailEl.value = "";
-        }
-        msgEl.className = "sub-msg success";
-      } catch (err) {
-        msgEl.textContent = "❌ حدث خطأ، حاول مرة أخرى.";
-        msgEl.className = "sub-msg error";
-      }
+        closeEditor(); renderDashboard();
+      } catch(ex) { alert("خطأ: " + ex.message); }
+      finally { btn.disabled = false; btn.textContent = "💾 حفظ"; }
     }
 
     /* ===================== INIT ===================== */
+    window._go = (v, d) => showView(v, d);
+
     window.addEventListener("DOMContentLoaded", () => {
-      // Nav buttons
-      document.getElementById("nav-login-btn")?.addEventListener("click", () => showView("login"));
-      document.getElementById("nav-logout-btn")?.addEventListener("click", handleLogout);
-      document.getElementById("nav-dash-btn")?.addEventListener("click", () => showView("dashboard"));
       document.getElementById("nav-logo")?.addEventListener("click", () => showView("home"));
 
-      // Login form
-      document.getElementById("login-form")?.addEventListener("submit", handleLogin);
+      // Auth modal tabs
+      document.getElementById("auth-tab-login")?.addEventListener("click",    () => switchAuthTab("login"));
+      document.getElementById("auth-tab-register")?.addEventListener("click", () => switchAuthTab("register"));
+      document.getElementById("btn-close-auth")?.addEventListener("click",    closeAuthModal);
+      document.getElementById("auth-modal")?.addEventListener("click", e => { if(e.target.id==="auth-modal") closeAuthModal(); });
 
-      // Post back btn
+      // Auth forms
+      document.getElementById("login-form")?.addEventListener("submit",    handleLogin);
+      document.getElementById("register-form")?.addEventListener("submit", handleRegister);
+
+      // Post back
       document.getElementById("post-back-btn")?.addEventListener("click", () => showView("home"));
       document.getElementById("dash-back-btn")?.addEventListener("click", () => showView("home"));
 
-      // Dashboard new post
-      document.getElementById("btn-new-post")?.addEventListener("click", () => openPostEditor(null));
+      // Dashboard
+      document.getElementById("btn-new-post")?.addEventListener("click", () => openEditor(null));
 
       // Editor
       document.getElementById("editor-form")?.addEventListener("submit", handleSavePost);
       document.getElementById("btn-close-editor")?.addEventListener("click", closeEditor);
-      document.getElementById("editor-modal")?.addEventListener("click", e => {
-        if (e.target.id === "editor-modal") closeEditor();
-      });
-
-      // Preview in editor
+      document.getElementById("editor-modal")?.addEventListener("click", e => { if(e.target.id==="editor-modal") closeEditor(); });
       document.getElementById("btn-preview-editor")?.addEventListener("click", () => {
-        const tagsRaw = document.getElementById("field-tags").value;
-        const tags = tagsRaw.split(",").map(t => t.trim()).filter(Boolean);
-        const previewPost = {
-          title: document.getElementById("field-title").value,
-          subtitle: document.getElementById("field-subtitle").value,
-          category: document.getElementById("field-category").value,
-          icon: document.getElementById("field-icon").value,
-          tags,
-          readTime: document.getElementById("field-readtime").value,
-          content: document.getElementById("field-content").value,
-        };
+        const tags = document.getElementById("f-tags").value.split(",").map(t=>t.trim()).filter(Boolean);
         closeEditor();
-        showView("post", previewPost);
+        showView("post", {
+          title:    document.getElementById("f-title").value,
+          subtitle: document.getElementById("f-subtitle").value,
+          category: document.getElementById("f-category").value,
+          icon:     document.getElementById("f-icon").value,
+          tags,
+          readTime: document.getElementById("f-readtime").value,
+          content:  document.getElementById("f-content").value,
+        });
       });
 
-      // Subscribe
-      document.getElementById("sub-form")?.addEventListener("submit", handleSubscribe);
-
-      // Start
       showView("home");
     });
-
-    // Expose to window so inline HTML can call if needed
-    window._app = { showView };
   </script>
 
   <style>
     :root {
-      --bg: #0d0f14;
-      --bg2: #13161e;
-      --bg3: #1a1e2a;
-      --border: rgba(255,255,255,0.07);
-      --text: #e8eaf0;
-      --text2: #8b90a8;
-      --text3: #5c6080;
-      --accent: #6c63ff;
+      --bg:      #0d0f14;
+      --bg2:     #13161e;
+      --bg3:     #1a1e2a;
+      --border:  rgba(255,255,255,0.07);
+      --text:    #e8eaf0;
+      --text2:   #8b90a8;
+      --text3:   #5c6080;
+      --accent:  #6c63ff;
       --accent2: #a78bfa;
       --accent3: #38bdf8;
-      --green: #22c55e;
-      --red: #ef4444;
-      --orange: #f97316;
-      --radius: 16px;
-      --radius-sm: 10px;
-      --shadow: 0 8px 32px rgba(0,0,0,0.4);
-      --font: 'Cairo', sans-serif;
+      --green:   #22c55e;
+      --red:     #ef4444;
+      --orange:  #f97316;
+      --radius:  16px;
+      --rsm:     10px;
+      --shadow:  0 8px 32px rgba(0,0,0,0.4);
+      --font:    'Cairo', sans-serif;
     }
-
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html { scroll-behavior: smooth; }
-
+    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+    html { scroll-behavior:smooth; }
     body {
-      font-family: var(--font);
-      background: var(--bg);
-      color: var(--text);
-      direction: rtl;
-      min-height: 100vh;
-      font-size: 15px;
-      line-height: 1.7;
+      font-family:var(--font); background:var(--bg); color:var(--text);
+      direction:rtl; min-height:100vh; font-size:15px; line-height:1.7;
     }
-
-    /* ---- BACKGROUND ---- */
     body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
+      content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
       background:
-        radial-gradient(ellipse 80% 50% at 20% 0%, rgba(108,99,255,0.12) 0%, transparent 60%),
-        radial-gradient(ellipse 60% 40% at 80% 100%, rgba(56,189,248,0.08) 0%, transparent 60%);
-      pointer-events: none;
-      z-index: 0;
+        radial-gradient(ellipse 80% 50% at 20% 0%,  rgba(108,99,255,.12) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 100%, rgba(56,189,248,.08)  0%, transparent 60%);
     }
 
-    /* ---- NAV ---- */
+    /* ─── NAV ─── */
     nav {
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      background: rgba(13,15,20,0.85);
-      backdrop-filter: blur(20px);
-      border-bottom: 1px solid var(--border);
-      padding: 0 24px;
-      height: 64px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      position:sticky; top:0; z-index:100;
+      background:rgba(13,15,20,.88); backdrop-filter:blur(20px);
+      border-bottom:1px solid var(--border);
+      height:64px; padding:0 28px;
+      display:flex; align-items:center; justify-content:space-between;
     }
-
     #nav-logo {
-      font-size: 1.3rem;
-      font-weight: 800;
-      cursor: pointer;
-      background: linear-gradient(135deg, var(--accent), var(--accent3));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      user-select: none;
-      letter-spacing: -0.5px;
+      font-size:1.25rem; font-weight:900; cursor:pointer;
+      background:linear-gradient(135deg,var(--accent),var(--accent3));
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text; user-select:none;
     }
+    #nav-right { display:flex; align-items:center; gap:10px; }
 
-    .nav-actions { display: flex; gap: 10px; align-items: center; }
+    .nav-user { display:flex; align-items:center; gap:8px; }
+    .avatar {
+      width:34px; height:34px; border-radius:50%;
+      background:linear-gradient(135deg,var(--accent),var(--accent3));
+      display:flex; align-items:center; justify-content:center;
+      font-weight:700; font-size:.9rem; color:#fff; flex-shrink:0;
+    }
+    .nav-username { font-size:.88rem; font-weight:600; color:var(--text2); }
 
+    /* ─── BUTTONS ─── */
     .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 18px;
-      border: none;
-      border-radius: 50px;
-      font-family: var(--font);
-      font-size: 0.88rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      text-decoration: none;
+      display:inline-flex; align-items:center; gap:6px;
+      padding:9px 20px; border:none; border-radius:50px;
+      font-family:var(--font); font-size:.88rem; font-weight:600;
+      cursor:pointer; transition:all .2s; text-decoration:none;
     }
+    .btn-sm { padding:7px 16px; font-size:.82rem; }
+    .btn-primary { background:linear-gradient(135deg,var(--accent),#8b5cf6); color:#fff; }
+    .btn-primary:hover { transform:translateY(-1px); box-shadow:0 4px 16px rgba(108,99,255,.4); }
+    .btn-ghost  { background:var(--bg3); color:var(--text2); border:1px solid var(--border); }
+    .btn-ghost:hover { background:var(--bg2); color:var(--text); }
+    .btn-full   { width:100%; justify-content:center; }
 
-    .btn-primary {
-      background: linear-gradient(135deg, var(--accent), #8b5cf6);
-      color: #fff;
-    }
-    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(108,99,255,0.4); }
+    /* ─── VIEWS ─── */
+    .view { display:none; position:relative; z-index:1; }
+    .view.active { display:block; animation:fadeIn .3s ease; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 
-    .btn-ghost {
-      background: var(--bg3);
-      color: var(--text2);
-      border: 1px solid var(--border);
-    }
-    .btn-ghost:hover { background: var(--bg2); color: var(--text); }
-
-    .btn-danger { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
-    .btn-danger:hover { background: var(--red); color: #fff; }
-
-    .btn-success { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
-    .btn-success:hover { background: var(--green); color: #fff; }
-
-    /* ---- VIEWS ---- */
-    .view { display: none; position: relative; z-index: 1; }
-    .view.active { display: block; }
-
-    /* ---- HOME VIEW ---- */
+    /* ─── HOME ─── */
     .home-hero {
-      text-align: center;
-      padding: 80px 24px 60px;
-      max-width: 700px;
-      margin: 0 auto;
+      text-align:center; padding:72px 24px 56px;
+      max-width:680px; margin:0 auto;
     }
-
     .hero-badge {
-      display: inline-block;
-      background: rgba(108,99,255,0.15);
-      border: 1px solid rgba(108,99,255,0.3);
-      color: var(--accent2);
-      border-radius: 50px;
-      padding: 6px 18px;
-      font-size: 0.82rem;
-      font-weight: 600;
-      margin-bottom: 24px;
-      letter-spacing: 0.3px;
+      display:inline-block; margin-bottom:22px;
+      background:rgba(108,99,255,.12); border:1px solid rgba(108,99,255,.3);
+      color:var(--accent2); border-radius:50px; padding:5px 18px;
+      font-size:.8rem; font-weight:700;
     }
-
     .hero-title {
-      font-size: clamp(2rem, 5vw, 3.2rem);
-      font-weight: 900;
-      line-height: 1.2;
-      margin-bottom: 16px;
-      letter-spacing: -1px;
+      font-size:clamp(1.9rem,5vw,3rem); font-weight:900;
+      line-height:1.2; margin-bottom:14px; letter-spacing:-1px;
     }
-
     .gradient-text {
-      background: linear-gradient(135deg, #a78bfa, #38bdf8, #6c63ff);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      background:linear-gradient(135deg,#a78bfa,#38bdf8,#6c63ff);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
     }
+    .hero-desc { color:var(--text2); font-size:1rem; max-width:480px; margin:0 auto; }
 
-    .hero-desc { color: var(--text2); font-size: 1.05rem; max-width: 500px; margin: 0 auto 32px; }
-
-    /* ---- CATEGORY SECTION ---- */
-    .category-section { margin-bottom: 56px; }
+    /* ─── POSTS GRID ─── */
+    #posts-container { max-width:1180px; margin:0 auto; padding:0 16px 80px; }
+    .category-section { margin-bottom:52px; }
     .category-title {
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: var(--text2);
-      margin-bottom: 20px;
-      padding: 0 16px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
+      font-size:1rem; font-weight:700; color:var(--text2);
+      margin-bottom:18px; padding:0 8px;
+      display:flex; align-items:center; gap:12px;
     }
-    .category-title::after {
-      content: "";
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-
-    /* ---- CARDS GRID ---- */
-    .cards-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 20px;
-      padding: 0 16px;
-    }
+    .category-title::after { content:""; flex:1; height:1px; background:var(--border); }
+    .cards-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:18px; }
 
     .post-card {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 24px;
-      cursor: pointer;
-      transition: all 0.25s;
-      position: relative;
-      overflow: hidden;
+      background:var(--bg2); border:1px solid var(--border);
+      border-radius:var(--radius); padding:22px; cursor:pointer;
+      transition:all .25s; position:relative; overflow:hidden;
     }
-
     .post-card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(108,99,255,0.05) 0%, transparent 60%);
-      opacity: 0;
-      transition: opacity 0.3s;
+      content:""; position:absolute; inset:0;
+      background:linear-gradient(135deg,rgba(108,99,255,.05),transparent 60%);
+      opacity:0; transition:opacity .3s;
     }
+    .post-card:hover { border-color:rgba(108,99,255,.35); transform:translateY(-4px); box-shadow:0 12px 40px rgba(0,0,0,.3); }
+    .post-card:hover::before { opacity:1; }
 
-    .post-card:hover {
-      border-color: rgba(108,99,255,0.35);
-      transform: translateY(-4px);
-      box-shadow: 0 12px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(108,99,255,0.15);
-    }
-
-    .post-card:hover::before { opacity: 1; }
-
-    .card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 14px;
-    }
-
-    .card-icon { font-size: 1.8rem; }
-
+    .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .card-icon   { font-size:1.7rem; }
     .card-category {
-      font-size: 0.75rem;
-      font-weight: 700;
-      color: var(--accent2);
-      background: rgba(167,139,250,0.1);
-      border: 1px solid rgba(167,139,250,0.2);
-      border-radius: 50px;
-      padding: 3px 12px;
-      letter-spacing: 0.2px;
+      font-size:.73rem; font-weight:700; color:var(--accent2);
+      background:rgba(167,139,250,.1); border:1px solid rgba(167,139,250,.2);
+      border-radius:50px; padding:3px 11px;
     }
-
-    .card-title {
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 8px;
-      line-height: 1.4;
-    }
-
+    .card-title    { font-size:1.05rem; font-weight:700; margin-bottom:7px; line-height:1.4; }
     .card-subtitle {
-      font-size: 0.88rem;
-      color: var(--text2);
-      line-height: 1.6;
-      margin-bottom: 16px;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
+      font-size:.86rem; color:var(--text2); line-height:1.6; margin-bottom:14px;
+      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
     }
+    .card-footer  { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+    .tags-row     { display:flex; flex-wrap:wrap; gap:5px; }
+    .tag          { font-size:.7rem; font-weight:600; color:var(--accent3); background:rgba(56,189,248,.08); border:1px solid rgba(56,189,248,.15); border-radius:50px; padding:2px 9px; }
+    .read-time    { font-size:.76rem; color:var(--text3); white-space:nowrap; }
 
-    .card-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      flex-wrap: wrap;
+    /* ─── LOADER ─── */
+    #posts-loader { display:flex; justify-content:center; padding:80px; }
+    .spinner { width:40px; height:40px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+
+    .empty-state { text-align:center; padding:80px 24px; color:var(--text2); }
+    .empty-icon  { font-size:3rem; margin-bottom:14px; }
+
+    /* ─── SINGLE POST ─── */
+    #view-post { max-width:780px; margin:0 auto; padding:28px 24px 80px; }
+    .post-back-bar { margin-bottom:28px; }
+    .post-header-meta { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+    .post-icon-big   { font-size:2.4rem; }
+    .post-cat-badge  { font-size:.78rem; font-weight:700; color:var(--accent2); background:rgba(167,139,250,.12); border:1px solid rgba(167,139,250,.25); border-radius:50px; padding:4px 13px; }
+    .post-title      { font-size:clamp(1.5rem,4vw,2.3rem); font-weight:900; line-height:1.25; margin-bottom:10px; letter-spacing:-.5px; }
+    .post-subtitle-text { font-size:1rem; color:var(--text2); margin-bottom:14px; }
+    .post-meta-row   { display:flex; gap:18px; color:var(--text3); font-size:.83rem; margin-bottom:14px; }
+    .post-tags       { margin-bottom:26px; }
+    .post-divider    { border:none; border-top:1px solid var(--border); margin-bottom:30px; }
+    .post-body       { font-size:1rem; line-height:1.9; }
+    .post-body h2    { font-size:1.3rem; font-weight:700; margin:26px 0 12px; }
+    .post-body h3    { font-size:1.1rem; font-weight:700; margin:20px 0 10px; }
+    .post-body p     { margin-bottom:14px; }
+    .post-body code  { background:var(--bg3); border:1px solid var(--border); border-radius:5px; padding:2px 7px; font-size:.86em; color:var(--accent3); direction:ltr; display:inline-block; }
+    .post-body pre   { background:var(--bg3); border:1px solid var(--border); border-radius:var(--rsm); padding:18px; overflow-x:auto; margin:18px 0; direction:ltr; }
+    .post-body pre code { background:none; border:none; padding:0; display:block; }
+    .post-body ul, .post-body ol { margin:14px 0; padding-right:22px; }
+    .post-body li    { margin-bottom:7px; }
+    .post-body blockquote { border-right:3px solid var(--accent); background:rgba(108,99,255,.06); border-radius:0 var(--rsm) var(--rsm) 0; padding:12px 18px; margin:18px 0; color:var(--text2); }
+    .post-body strong { color:var(--text); font-weight:700; }
+    .post-body a      { color:var(--accent2); text-decoration:underline; }
+
+    /* ─── AUTH MODAL ─── */
+    #auth-modal {
+      display:none; position:fixed; inset:0; z-index:200;
+      background:rgba(0,0,0,.72); backdrop-filter:blur(8px);
+      align-items:center; justify-content:center; padding:20px;
     }
+    #auth-modal.active { display:flex; animation:fadeIn .2s ease; }
 
-    .tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
-
-    .tag {
-      font-size: 0.72rem;
-      font-weight: 600;
-      color: var(--accent3);
-      background: rgba(56,189,248,0.08);
-      border: 1px solid rgba(56,189,248,0.15);
-      border-radius: 50px;
-      padding: 2px 10px;
+    .auth-card {
+      background:var(--bg2); border:1px solid var(--border);
+      border-radius:var(--radius); width:100%; max-width:420px;
+      box-shadow:var(--shadow); overflow:hidden;
     }
-
-    .read-time { font-size: 0.78rem; color: var(--text3); white-space: nowrap; }
-
-    /* ---- LOADER ---- */
-    #posts-loader {
-      display: flex;
-      justify-content: center;
-      padding: 80px;
+    .auth-tabs {
+      display:flex; border-bottom:1px solid var(--border);
     }
-
-    .spinner {
-      width: 40px; height: 40px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
+    .auth-tab {
+      flex:1; padding:16px; text-align:center; cursor:pointer;
+      font-family:var(--font); font-size:.9rem; font-weight:700;
+      color:var(--text3); background:none; border:none;
+      transition:all .2s; border-bottom:2px solid transparent;
     }
+    .auth-tab.active-tab { color:var(--accent2); border-bottom-color:var(--accent2); }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .auth-body { padding:32px 30px 28px; }
 
-    /* ---- EMPTY STATE ---- */
-    .empty-state {
-      text-align: center;
-      padding: 80px 24px;
-      color: var(--text2);
+    .auth-close {
+      position:absolute; top:12px; left:12px;
+      width:32px; height:32px; border-radius:8px;
+      background:var(--bg3); border:1px solid var(--border);
+      cursor:pointer; font-size:.9rem; color:var(--text2);
+      display:flex; align-items:center; justify-content:center;
+      transition:all .18s;
     }
-    .empty-icon { font-size: 3rem; margin-bottom: 16px; }
+    .auth-close:hover { background:var(--red); color:#fff; }
 
-    /* ---- POSTS CONTAINER ---- */
-    #posts-container { max-width: 1200px; margin: 0 auto; padding: 0 16px 80px; }
+    .auth-card { position:relative; }
 
-    /* ---- SUBSCRIBE SECTION ---- */
-    .subscribe-section {
-      max-width: 560px;
-      margin: 0 auto 80px;
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 40px 32px;
-      text-align: center;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .subscribe-section::before {
-      content: "";
-      position: absolute;
-      top: -50%;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 200%;
-      height: 200%;
-      background: radial-gradient(ellipse, rgba(108,99,255,0.08) 0%, transparent 60%);
-      pointer-events: none;
-    }
-
-    .subscribe-section h3 {
-      font-size: 1.3rem;
-      font-weight: 800;
-      margin-bottom: 8px;
-    }
-
-    .subscribe-section p { color: var(--text2); font-size: 0.9rem; margin-bottom: 20px; }
-
-    .sub-input-row {
-      display: flex;
-      gap: 10px;
-      max-width: 400px;
-      margin: 0 auto;
-    }
-
-    .input {
-      flex: 1;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: 50px;
-      padding: 10px 18px;
-      color: var(--text);
-      font-family: var(--font);
-      font-size: 0.9rem;
-      outline: none;
-      transition: border-color 0.2s;
-      direction: ltr;
-    }
-    .input:focus { border-color: var(--accent); }
-    .input::placeholder { color: var(--text3); }
-
-    .sub-msg { font-size: 0.85rem; margin-top: 12px; color: var(--text2); }
-    .sub-msg.success { color: var(--green); }
-    .sub-msg.error { color: var(--red); }
-
-    /* ---- SINGLE POST VIEW ---- */
-    #view-post {
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 32px 24px 80px;
-    }
-
-    .post-back-bar {
-      margin-bottom: 32px;
-    }
-
-    .post-header-meta {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      margin-bottom: 20px;
-    }
-
-    .post-icon-big { font-size: 2.5rem; }
-
-    .post-cat-badge {
-      font-size: 0.8rem;
-      font-weight: 700;
-      color: var(--accent2);
-      background: rgba(167,139,250,0.12);
-      border: 1px solid rgba(167,139,250,0.25);
-      border-radius: 50px;
-      padding: 4px 14px;
-    }
-
-    .post-title {
-      font-size: clamp(1.6rem, 4vw, 2.4rem);
-      font-weight: 900;
-      line-height: 1.25;
-      margin-bottom: 12px;
-      letter-spacing: -0.5px;
-    }
-
-    .post-subtitle {
-      font-size: 1.05rem;
-      color: var(--text2);
-      margin-bottom: 16px;
-    }
-
-    .post-meta-row {
-      display: flex;
-      gap: 20px;
-      color: var(--text3);
-      font-size: 0.85rem;
-      margin-bottom: 16px;
-    }
-
-    .post-tags { margin-bottom: 28px; }
-
-    .post-divider {
-      border: none;
-      border-top: 1px solid var(--border);
-      margin-bottom: 32px;
-    }
-
-    .post-body {
-      font-size: 1rem;
-      line-height: 1.9;
-      color: var(--text);
-    }
-
-    .post-body h1, .post-body h2, .post-body h3 {
-      font-weight: 700;
-      margin: 28px 0 14px;
-      color: var(--text);
-    }
-    .post-body h2 { font-size: 1.35rem; }
-    .post-body h3 { font-size: 1.15rem; }
-
-    .post-body p { margin-bottom: 16px; }
-
-    .post-body code {
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 2px 8px;
-      font-size: 0.88em;
-      font-family: 'Courier New', monospace;
-      color: var(--accent3);
-      direction: ltr;
-      display: inline-block;
-    }
-
-    .post-body pre {
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 20px;
-      overflow-x: auto;
-      margin: 20px 0;
-      direction: ltr;
-    }
-
-    .post-body pre code {
-      background: none;
-      border: none;
-      padding: 0;
-      display: block;
-    }
-
-    .post-body ul, .post-body ol {
-      margin: 16px 0 16px 0;
-      padding-right: 24px;
-    }
-    .post-body li { margin-bottom: 8px; }
-
-    .post-body blockquote {
-      border-right: 3px solid var(--accent);
-      background: rgba(108,99,255,0.06);
-      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-      padding: 14px 20px;
-      margin: 20px 0;
-      color: var(--text2);
-      font-style: italic;
-    }
-
-    .post-body strong { color: var(--text); font-weight: 700; }
-    .post-body a { color: var(--accent2); text-decoration: underline; }
-    .post-body a:hover { color: var(--accent3); }
-
-    /* ---- LOGIN VIEW ---- */
-    #view-login {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: calc(100vh - 64px);
-      padding: 40px 24px;
-    }
-
-    .login-card {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 48px 40px;
-      width: 100%;
-      max-width: 420px;
-      box-shadow: var(--shadow);
-    }
-
-    .login-card h2 {
-      font-size: 1.6rem;
-      font-weight: 800;
-      margin-bottom: 6px;
-    }
-
-    .login-card p { color: var(--text2); font-size: 0.9rem; margin-bottom: 32px; }
-
-    .form-group { margin-bottom: 18px; }
-    .form-group label {
-      display: block;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text2);
-      margin-bottom: 8px;
-    }
-
+    .form-group { margin-bottom:16px; }
+    .form-group label { display:block; font-size:.82rem; font-weight:600; color:var(--text2); margin-bottom:7px; }
     .input-full {
-      width: 100%;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 12px 16px;
-      color: var(--text);
-      font-family: var(--font);
-      font-size: 0.95rem;
-      outline: none;
-      transition: border-color 0.2s;
-      direction: ltr;
-      text-align: right;
+      width:100%; background:var(--bg3); border:1px solid var(--border);
+      border-radius:var(--rsm); padding:11px 14px;
+      color:var(--text); font-family:var(--font); font-size:.92rem;
+      outline:none; transition:border-color .2s; direction:ltr; text-align:right;
     }
-    .input-full:focus { border-color: var(--accent); }
+    .input-full:focus { border-color:var(--accent); }
 
-    #login-error {
-      color: var(--red);
-      font-size: 0.85rem;
-      margin-bottom: 14px;
-      min-height: 20px;
-    }
+    #auth-error { color:var(--red); font-size:.82rem; min-height:18px; margin-bottom:10px; }
 
-    /* ---- DASHBOARD VIEW ---- */
-    #view-dashboard {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 32px 24px 80px;
-    }
+    .auth-switch { text-align:center; margin-top:16px; font-size:.82rem; color:var(--text3); }
+    .auth-switch span { color:var(--accent2); cursor:pointer; font-weight:600; }
+    .auth-switch span:hover { text-decoration:underline; }
 
-    .dash-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 32px;
-      flex-wrap: wrap;
-      gap: 14px;
-    }
-
-    .dash-header h2 { font-size: 1.6rem; font-weight: 800; }
-
+    /* ─── DASHBOARD ─── */
+    #view-dashboard { max-width:880px; margin:0 auto; padding:32px 24px 80px; }
+    .dash-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; flex-wrap:wrap; gap:12px; }
+    .dash-header h2 { font-size:1.5rem; font-weight:800; }
     .dash-post-item {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 18px 20px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 12px;
-      transition: border-color 0.2s;
-      flex-wrap: wrap;
+      background:var(--bg2); border:1px solid var(--border);
+      border-radius:var(--rsm); padding:16px 18px;
+      display:flex; align-items:center; gap:14px;
+      margin-bottom:10px; transition:border-color .2s; flex-wrap:wrap;
     }
-    .dash-post-item:hover { border-color: rgba(108,99,255,0.3); }
-
-    .dash-post-info {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      flex: 1;
-      min-width: 0;
-    }
-
-    .dash-post-icon { font-size: 1.8rem; flex-shrink: 0; }
-
-    .dash-post-title {
-      font-weight: 700;
-      font-size: 0.98rem;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .dash-post-cat { font-size: 0.8rem; color: var(--text3); margin-top: 2px; }
-
-    .dash-post-status { flex-shrink: 0; }
-
-    .status-badge {
-      font-size: 0.75rem;
-      font-weight: 700;
-      border-radius: 50px;
-      padding: 4px 12px;
-      border: 1px solid;
-    }
-    .status-badge.published {
-      color: var(--green);
-      background: rgba(34,197,94,0.1);
-      border-color: rgba(34,197,94,0.2);
-    }
-    .status-badge.draft {
-      color: var(--orange);
-      background: rgba(249,115,22,0.1);
-      border-color: rgba(249,115,22,0.2);
-    }
-
-    .dash-actions { display: flex; gap: 8px; flex-shrink: 0; }
-
+    .dash-post-item:hover { border-color:rgba(108,99,255,.3); }
+    .dash-post-info { display:flex; align-items:center; gap:12px; flex:1; min-width:0; }
+    .dash-post-icon  { font-size:1.7rem; flex-shrink:0; }
+    .dash-post-title { font-weight:700; font-size:.95rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .dash-post-cat   { font-size:.78rem; color:var(--text3); margin-top:2px; }
+    .status-badge    { font-size:.73rem; font-weight:700; border-radius:50px; padding:3px 11px; border:1px solid; flex-shrink:0; }
+    .status-badge.published { color:var(--green); background:rgba(34,197,94,.1); border-color:rgba(34,197,94,.2); }
+    .status-badge.draft     { color:var(--orange); background:rgba(249,115,22,.1); border-color:rgba(249,115,22,.2); }
+    .dash-actions { display:flex; gap:7px; flex-shrink:0; }
     .btn-icon {
-      width: 36px; height: 36px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--bg3);
-      cursor: pointer;
-      font-size: 0.95rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.18s;
+      width:34px; height:34px; border:1px solid var(--border);
+      border-radius:7px; background:var(--bg3); cursor:pointer;
+      font-size:.9rem; display:flex; align-items:center; justify-content:center;
+      transition:all .18s;
     }
-    .btn-icon:hover { border-color: var(--accent); transform: scale(1.05); }
-    .btn-delete:hover { background: rgba(239,68,68,0.15); border-color: var(--red); }
-    .btn-edit:hover { background: rgba(56,189,248,0.1); border-color: var(--accent3); }
+    .btn-icon:hover { border-color:var(--accent); transform:scale(1.05); }
+    .btn-del:hover  { background:rgba(239,68,68,.15); border-color:var(--red); }
 
-    /* ---- EDITOR MODAL ---- */
+    /* ─── EDITOR MODAL ─── */
     #editor-modal {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.7);
-      backdrop-filter: blur(6px);
-      z-index: 1000;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      overflow-y: auto;
+      display:none; position:fixed; inset:0; z-index:300;
+      background:rgba(0,0,0,.75); backdrop-filter:blur(7px);
+      align-items:center; justify-content:center; padding:20px; overflow-y:auto;
     }
-
-    #editor-modal.active { display: flex; }
-
+    #editor-modal.active { display:flex; }
     .editor-card {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 36px 32px;
-      width: 100%;
-      max-width: 700px;
-      max-height: 90vh;
-      overflow-y: auto;
-      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+      background:var(--bg2); border:1px solid var(--border);
+      border-radius:var(--radius); padding:32px 28px;
+      width:100%; max-width:680px; max-height:90vh; overflow-y:auto;
+      box-shadow:0 24px 64px rgba(0,0,0,.5);
     }
-
-    .editor-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 28px;
-    }
-
-    #editor-title { font-size: 1.4rem; font-weight: 800; }
-
+    .editor-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+    #editor-heading { font-size:1.3rem; font-weight:800; }
     .editor-close {
-      width: 36px; height: 36px;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 1rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.18s;
-      color: var(--text2);
+      width:34px; height:34px; background:var(--bg3); border:1px solid var(--border);
+      border-radius:7px; cursor:pointer; font-size:.95rem;
+      display:flex; align-items:center; justify-content:center;
+      color:var(--text2); transition:all .18s;
     }
-    .editor-close:hover { background: var(--red); color: #fff; border-color: var(--red); }
+    .editor-close:hover { background:var(--red); color:#fff; border-color:var(--red); }
+    .editor-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .editor-grid .span-2 { grid-column:1/-1; }
+    textarea.input-full { resize:vertical; min-height:200px; line-height:1.7; }
+    .editor-footer { display:flex; align-items:center; justify-content:space-between; margin-top:20px; flex-wrap:wrap; gap:10px; }
+    .checkbox-row { display:flex; align-items:center; gap:9px; cursor:pointer; }
+    .checkbox-row input[type="checkbox"] { width:17px; height:17px; accent-color:var(--accent); cursor:pointer; }
+    .checkbox-row span { font-size:.88rem; font-weight:600; color:var(--text2); }
+    .editor-actions { display:flex; gap:8px; }
 
-    .editor-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-    .editor-grid .span-2 { grid-column: 1 / -1; }
-
-    .editor-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 24px;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    .checkbox-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      cursor: pointer;
-    }
-
-    .checkbox-row input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      accent-color: var(--accent);
-      cursor: pointer;
-    }
-
-    .checkbox-row span { font-size: 0.9rem; font-weight: 600; color: var(--text2); }
-
-    textarea.input-full {
-      resize: vertical;
-      min-height: 220px;
-      line-height: 1.7;
-    }
-
-    .editor-actions { display: flex; gap: 10px; }
-
-    /* ---- FOOTER ---- */
+    /* ─── FOOTER ─── */
     footer {
-      text-align: center;
-      padding: 32px 24px;
-      color: var(--text3);
-      font-size: 0.82rem;
-      border-top: 1px solid var(--border);
-      position: relative;
-      z-index: 1;
+      text-align:center; padding:28px 24px; color:var(--text3);
+      font-size:.8rem; border-top:1px solid var(--border); position:relative; z-index:1;
     }
 
-    /* ---- RESPONSIVE ---- */
-    @media (max-width: 640px) {
-      .cards-grid { grid-template-columns: 1fr; }
-      .editor-grid { grid-template-columns: 1fr; }
-      .editor-grid .span-2 { grid-column: 1; }
-      .login-card { padding: 32px 24px; }
-      .editor-card { padding: 24px 20px; }
-      .sub-input-row { flex-direction: column; }
-      .dash-post-item { flex-direction: column; align-items: flex-start; }
-      nav { padding: 0 16px; }
-      #nav-logo { font-size: 1.1rem; }
+    /* ─── RESPONSIVE ─── */
+    @media(max-width:640px){
+      .cards-grid { grid-template-columns:1fr; }
+      .editor-grid { grid-template-columns:1fr; }
+      .editor-grid .span-2 { grid-column:1; }
+      .auth-body { padding:24px 20px 20px; }
+      nav { padding:0 16px; }
+      .dash-post-item { flex-wrap:wrap; }
     }
-
-    /* ---- ANIMATIONS ---- */
-    .view.active { animation: fadeIn 0.3s ease; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-
-    .post-card { animation: cardIn 0.4s ease both; }
-    @keyframes cardIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
 <body>
 
-<!-- =================== NAVBAR =================== -->
+<!-- ══════════ NAV ══════════ -->
 <nav>
   <div id="nav-logo">🎓 منصة التعلم</div>
-  <div class="nav-actions">
-    <button id="nav-dash-btn" class="btn btn-ghost" style="display:none">⚙️ لوحة التحكم</button>
-    <button id="nav-login-btn" class="btn btn-primary">🔐 دخول الأدمن</button>
-    <button id="nav-logout-btn" class="btn btn-ghost" style="display:none">خروج 👋</button>
-  </div>
+  <div id="nav-right"></div>
 </nav>
 
-<!-- =================== HOME VIEW =================== -->
+<!-- ══════════ HOME ══════════ -->
 <div id="view-home" class="view">
   <div class="home-hero">
     <div class="hero-badge">✨ تعلّم • اكتشف • تطوّر</div>
-    <h1 class="hero-title">
-      <span class="gradient-text">محتوى تعليمي</span><br />
-      يصنع الفارق
-    </h1>
+    <h1 class="hero-title"><span class="gradient-text">محتوى تعليمي</span><br/>يصنع الفارق</h1>
     <p class="hero-desc">مقالات وشروحات مختارة في التقنية والبرمجة وكل ما يهمك.</p>
   </div>
-
   <div id="posts-container">
-    <div id="posts-loader" style="display:none">
-      <div class="spinner"></div>
-    </div>
+    <div id="posts-loader"><div class="spinner"></div></div>
     <div id="posts-grid"></div>
-  </div>
-
-  <!-- Subscribe Section -->
-  <div style="padding: 0 16px;">
-    <div class="subscribe-section" style="margin: 0 auto 80px;">
-      <h3>🔔 تابع كل جديد</h3>
-      <p>سجّل إيميلك وكن أول من يعلم بالمقالات الجديدة</p>
-      <form id="sub-form">
-        <div class="sub-input-row">
-          <input type="email" id="sub-email" class="input" placeholder="your@email.com" required />
-          <button type="submit" class="btn btn-primary">متابعة</button>
-        </div>
-        <div id="sub-msg" class="sub-msg"></div>
-      </form>
-    </div>
   </div>
 </div>
 
-<!-- =================== POST VIEW =================== -->
+<!-- ══════════ SINGLE POST ══════════ -->
 <div id="view-post" class="view">
   <div class="post-back-bar">
-    <button id="post-back-btn" class="btn btn-ghost" style="margin: 20px 24px 0">← العودة للرئيسية</button>
+    <button id="post-back-btn" class="btn btn-ghost btn-sm" style="margin:20px 24px 0">← العودة</button>
   </div>
   <div id="post-content"></div>
 </div>
 
-<!-- =================== LOGIN VIEW =================== -->
-<div id="view-login" class="view">
-  <div class="login-card">
-    <h2>🔐 دخول الأدمن</h2>
-    <p>هذه الصفحة للأدمن فقط</p>
-    <form id="login-form">
-      <div class="form-group">
-        <label>البريد الإلكتروني</label>
-        <input type="email" id="login-email" class="input-full" placeholder="admin@example.com" required />
-      </div>
-      <div class="form-group">
-        <label>كلمة المرور</label>
-        <input type="password" id="login-pass" class="input-full" placeholder="••••••••" required />
-      </div>
-      <div id="login-error"></div>
-      <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:13px;">
-        دخول
-      </button>
-    </form>
-  </div>
-</div>
-
-<!-- =================== DASHBOARD VIEW =================== -->
+<!-- ══════════ DASHBOARD ══════════ -->
 <div id="view-dashboard" class="view">
   <div class="dash-header">
     <div>
-      <button id="dash-back-btn" class="btn btn-ghost" style="margin-bottom:12px">← الرئيسية</button>
+      <button id="dash-back-btn" class="btn btn-ghost btn-sm" style="margin-bottom:10px">← الرئيسية</button>
       <h2>⚙️ لوحة التحكم</h2>
     </div>
     <button id="btn-new-post" class="btn btn-primary">➕ مقال جديد</button>
@@ -1277,73 +723,100 @@
   <div id="dash-posts-list"></div>
 </div>
 
-<!-- =================== EDITOR MODAL =================== -->
+<!-- ══════════ AUTH MODAL ══════════ -->
+<div id="auth-modal">
+  <div class="auth-card">
+    <button id="btn-close-auth" class="auth-close">✕</button>
+    <div class="auth-tabs">
+      <button id="auth-tab-login"    class="auth-tab active-tab">تسجيل الدخول</button>
+      <button id="auth-tab-register" class="auth-tab">إنشاء حساب</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="auth-panel-login" class="auth-body">
+      <form id="login-form">
+        <div class="form-group">
+          <label>البريد الإلكتروني</label>
+          <input type="email" id="login-email" class="input-full" placeholder="example@email.com" required />
+        </div>
+        <div class="form-group">
+          <label>كلمة المرور</label>
+          <input type="password" id="login-pass" class="input-full" placeholder="••••••••" required />
+        </div>
+        <div id="auth-error"></div>
+        <button type="submit" class="btn btn-primary btn-full">دخول</button>
+      </form>
+      <div class="auth-switch">مش عندك حساب؟ <span onclick="document.getElementById('auth-tab-register').click()">سجّل دلوقتي</span></div>
+    </div>
+
+    <!-- REGISTER -->
+    <div id="auth-panel-register" class="auth-body" style="display:none">
+      <form id="register-form">
+        <div class="form-group">
+          <label>الاسم</label>
+          <input type="text" id="reg-name" class="input-full" placeholder="اسمك الكامل" required />
+        </div>
+        <div class="form-group">
+          <label>البريد الإلكتروني</label>
+          <input type="email" id="reg-email" class="input-full" placeholder="example@email.com" required />
+        </div>
+        <div class="form-group">
+          <label>كلمة المرور (6 أحرف على الأقل)</label>
+          <input type="password" id="reg-pass" class="input-full" placeholder="••••••••" required />
+        </div>
+        <div id="auth-error"></div>
+        <button type="submit" class="btn btn-primary btn-full">إنشاء الحساب</button>
+      </form>
+      <div class="auth-switch">عندك حساب؟ <span onclick="document.getElementById('auth-tab-login').click()">سجّل دخول</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ EDITOR MODAL ══════════ -->
 <div id="editor-modal">
   <div class="editor-card">
     <div class="editor-header">
-      <h3 id="editor-title">مقال جديد</h3>
+      <h3 id="editor-heading">مقال جديد</h3>
       <button id="btn-close-editor" class="editor-close">✕</button>
     </div>
     <form id="editor-form">
       <div class="editor-grid">
         <div class="span-2">
-          <div class="form-group">
-            <label>العنوان الرئيسي</label>
-            <input type="text" id="field-title" class="input-full" placeholder="عنوان المقال..." required />
-          </div>
+          <div class="form-group"><label>العنوان الرئيسي</label><input type="text" id="f-title" class="input-full" placeholder="عنوان المقال..." required /></div>
         </div>
         <div class="span-2">
-          <div class="form-group">
-            <label>العنوان الفرعي</label>
-            <input type="text" id="field-subtitle" class="input-full" placeholder="وصف قصير للمقال..." />
-          </div>
+          <div class="form-group"><label>العنوان الفرعي</label><input type="text" id="f-subtitle" class="input-full" placeholder="وصف قصير..." /></div>
         </div>
         <div>
-          <div class="form-group">
-            <label>التصنيف</label>
-            <input type="text" id="field-category" class="input-full" placeholder="مثال: برمجة، تقنية..." />
-          </div>
+          <div class="form-group"><label>التصنيف</label><input type="text" id="f-category" class="input-full" placeholder="برمجة، تقنية..." /></div>
         </div>
         <div>
-          <div class="form-group">
-            <label>الأيقونة (Emoji)</label>
-            <input type="text" id="field-icon" class="input-full" placeholder="📄" />
-          </div>
+          <div class="form-group"><label>الأيقونة (Emoji)</label><input type="text" id="f-icon" class="input-full" placeholder="📄" /></div>
         </div>
         <div>
-          <div class="form-group">
-            <label>الوسوم (مفصولة بفاصلة)</label>
-            <input type="text" id="field-tags" class="input-full" placeholder="JavaScript, React, API" />
-          </div>
+          <div class="form-group"><label>الوسوم (مفصولة بفاصلة)</label><input type="text" id="f-tags" class="input-full" placeholder="JS, React, API" /></div>
         </div>
         <div>
-          <div class="form-group">
-            <label>وقت القراءة (دقائق)</label>
-            <input type="number" id="field-readtime" class="input-full" placeholder="5" min="1" />
-          </div>
+          <div class="form-group"><label>وقت القراءة (دقائق)</label><input type="number" id="f-readtime" class="input-full" placeholder="5" min="1" /></div>
         </div>
         <div class="span-2">
-          <div class="form-group">
-            <label>المحتوى (HTML مدعوم)</label>
-            <textarea id="field-content" class="input-full" placeholder="اكتب محتوى المقال هنا... يمكنك استخدام HTML مثل &lt;h2&gt;، &lt;p&gt;، &lt;code&gt;، &lt;ul&gt; ..."></textarea>
-          </div>
+          <div class="form-group"><label>المحتوى (HTML مدعوم)</label><textarea id="f-content" class="input-full" placeholder="اكتب محتوى المقال هنا...&#10;يمكنك استخدام HTML: &lt;h2&gt;، &lt;p&gt;، &lt;code&gt;، &lt;ul&gt;..."></textarea></div>
         </div>
       </div>
       <div class="editor-footer">
         <label class="checkbox-row">
-          <input type="checkbox" id="field-published" />
+          <input type="checkbox" id="f-published" />
           <span>🚀 نشر فوراً</span>
         </label>
         <div class="editor-actions">
           <button type="button" id="btn-preview-editor" class="btn btn-ghost">👁 معاينة</button>
-          <button type="submit" id="btn-save-post" class="btn btn-primary">💾 حفظ المقال</button>
+          <button type="submit" id="btn-save-post" class="btn btn-primary">💾 حفظ</button>
         </div>
       </div>
     </form>
   </div>
 </div>
 
-<!-- =================== FOOTER =================== -->
 <footer>
   <p>© 2024 منصة التعلم · صُنع بـ ❤️ للمحتوى التعليمي العربي</p>
 </footer>
