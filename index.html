@@ -1,804 +1,1352 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sound Design — دليل شامل</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>منصة التعلم</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
-  :root {
-    --bg: #0d0f14;
-    --surface: #141720;
-    --surface2: #1a1f2e;
-    --border: #252b3b;
-    --sfx: #f97316;
-    --sfx-dim: rgba(249,115,22,0.12);
-    --foley: #22d3ee;
-    --foley-dim: rgba(34,211,238,0.10);
-    --amb: #a78bfa;
-    --amb-dim: rgba(167,139,250,0.10);
-    --green: #4ade80;
-    --green-dim: rgba(74,222,128,0.10);
-    --text: #e8eaf0;
-    --muted: #7c8499;
-  }
+  <!-- Firebase CDN -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, collection, addDoc, getDocs, getDoc, doc,
+      updateDoc, deleteDoc, query, orderBy, serverTimestamp, where }
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+    /* ============================================================
+       🔥 FIREBASE CONFIG — ضع إعدادات Firebase الخاصة بك هنا
+    ============================================================ */
+    const firebaseConfig = {
+      apiKey: "AIzaSyBDjbkPEBmDv49NmCESLNdU3hyM1rOui9M",
+      authDomain: "reelmaster-e03b2.firebaseapp.com",
+      projectId: "reelmaster-e03b2",
+      storageBucket: "reelmaster-e03b2.firebasestorage.app",
+      messagingSenderId: "892892909343",
+      appId: "1:892892909343:web:a6db3c3c075678b7e3aa2a"
+    };
 
-  body {
-    background: var(--bg);
-    font-family: 'Cairo', sans-serif;
-    color: var(--text);
-    min-height: 100vh;
-    padding: 20px 16px 40px;
-  }
+    /* ============================================================
+       👑 ADMIN EMAIL — غيّر هذا الإيميل لإيميل الأدمن الخاص بك
+    ============================================================ */
+    const ADMIN_EMAIL = "kevin.hany.08@hotmail.com";
 
-  .header {
-    text-align: center;
-    margin-bottom: 32px;
-    padding-top: 12px;
-  }
-  .header .badge {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--muted);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 4px 14px;
-    margin-bottom: 14px;
-  }
-  .header h1 {
-    font-size: 28px;
-    font-weight: 900;
-    line-height: 1.2;
-    background: linear-gradient(135deg, #f97316, #22d3ee, #a78bfa);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin-bottom: 8px;
-  }
-  .header p { color: var(--muted); font-size: 14px; }
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
-  .section-card {
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    margin-bottom: 20px;
-    overflow: hidden;
-  }
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 18px 20px;
-    border-bottom: 1px solid var(--border);
-  }
-  .section-icon {
-    width: 42px; height: 42px;
-    border-radius: 12px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 20px; flex-shrink: 0;
-  }
-  .sfx .section-icon   { background: var(--sfx-dim); }
-  .foley .section-icon { background: var(--foley-dim); }
-  .amb .section-icon   { background: var(--amb-dim); }
-  .org .section-icon   { background: var(--green-dim); }
+    /* ===================== STATE ===================== */
+    let currentUser = null;
+    let isAdmin = false;
+    let allPosts = [];
+    let currentPost = null;
+    let editingPostId = null;
+    let currentView = "home"; // home | post | dashboard | login
 
-  .section-title-wrap h2 { font-size: 18px; font-weight: 900; }
-  .sfx   .section-title-wrap h2 { color: var(--sfx); }
-  .foley .section-title-wrap h2 { color: var(--foley); }
-  .amb   .section-title-wrap h2 { color: var(--amb); }
-  .org   .section-title-wrap h2 { color: var(--green); }
-  .section-title-wrap p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    /* ===================== ROUTER ===================== */
+    function showView(view, data = null) {
+      currentView = view;
+      document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+      const el = document.getElementById("view-" + view);
+      if (el) el.classList.add("active");
 
-  .section-body { padding: 20px; }
+      window.scrollTo({ top: 0, behavior: "smooth" });
 
-  .def-box {
-    border-radius: 12px;
-    padding: 14px 16px;
-    margin-bottom: 18px;
-    font-size: 14px;
-    line-height: 1.75;
-  }
-  .sfx   .def-box { background: var(--sfx-dim);   border-right: 3px solid var(--sfx); }
-  .foley .def-box { background: var(--foley-dim); border-right: 3px solid var(--foley); }
-  .amb   .def-box { background: var(--amb-dim);   border-right: 3px solid var(--amb); }
-  .org   .def-box { background: var(--green-dim); border-right: 3px solid var(--green); }
+      if (view === "home") renderHome();
+      if (view === "post" && data) renderPost(data);
+      if (view === "dashboard") renderDashboard();
+      if (view === "login") renderLoginView();
+    }
 
-  .sub-label {
-    font-size: 11px; font-weight: 700;
-    letter-spacing: 1.5px; text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 10px; margin-top: 18px;
-  }
+    /* ===================== AUTH ===================== */
+    onAuthStateChanged(auth, user => {
+      currentUser = user;
+      isAdmin = user && user.email === ADMIN_EMAIL;
+      updateNavbar();
+      if (currentView === "login" && user) showView("home");
+      if (currentView === "dashboard" && !isAdmin) showView("home");
+    });
 
-  .examples-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
-  .tag {
-    font-size: 12px; font-weight: 600;
-    padding: 5px 12px; border-radius: 8px; border: 1px solid;
-  }
-  .sfx   .tag { background: var(--sfx-dim);   border-color: rgba(249,115,22,.3);  color: #fba768; }
-  .foley .tag { background: var(--foley-dim); border-color: rgba(34,211,238,.3);  color: #67e0f5; }
-  .amb   .tag { background: var(--amb-dim);   border-color: rgba(167,139,250,.3); color: #c4b0fd; }
-  .org   .tag { background: var(--green-dim); border-color: rgba(74,222,128,.3);  color: #86efac; }
+    function updateNavbar() {
+      const loginBtn = document.getElementById("nav-login-btn");
+      const logoutBtn = document.getElementById("nav-logout-btn");
+      const dashBtn = document.getElementById("nav-dash-btn");
+      if (loginBtn) loginBtn.style.display = currentUser ? "none" : "flex";
+      if (logoutBtn) logoutBtn.style.display = currentUser ? "flex" : "none";
+      if (dashBtn) dashBtn.style.display = isAdmin ? "flex" : "none";
+    }
 
-  .effects-list { display: flex; flex-direction: column; gap: 8px; }
-  .effect-row {
-    background: var(--surface2);
-    border-radius: 10px;
-    padding: 12px 14px;
-  }
-  .effect-row .effect-name {
-    font-size: 13px; font-weight: 700; margin-bottom: 4px;
-  }
-  .sfx   .effect-row .effect-name { color: var(--sfx); }
-  .foley .effect-row .effect-name { color: var(--foley); }
-  .amb   .effect-row .effect-name { color: var(--amb); }
-  .effect-row .effect-path {
-    font-size: 11px; color: #4a5568;
-    background: #0d0f14; border-radius: 5px;
-    padding: 2px 8px; display: inline-block; margin-bottom: 5px;
-    font-family: monospace; letter-spacing: .3px;
-  }
-  .effect-row .effect-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
-  .effect-row .effect-tip {
-    font-size: 12px; color: var(--muted);
-    margin-top: 5px; padding-top: 5px;
-    border-top: 1px solid var(--border);
-    opacity: .8;
-  }
+    async function handleLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById("login-email").value.trim();
+      const pass = document.getElementById("login-pass").value;
+      const errEl = document.getElementById("login-error");
+      errEl.textContent = "";
+      try {
+        await signInWithEmailAndPassword(auth, email, pass);
+        if (email !== ADMIN_EMAIL) {
+          await auth.signOut();
+          errEl.textContent = "⛔ هذا الحساب ليس أدمن.";
+          return;
+        }
+        showView("dashboard");
+      } catch (err) {
+        errEl.textContent = "❌ بيانات خاطئة، تحقق من الإيميل وكلمة المرور.";
+      }
+    }
 
-  .levels-block {
-    background: var(--surface2);
-    border-radius: 14px;
-    padding: 16px; margin-top: 8px;
-  }
-  .level-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-  .level-row:last-child { margin-bottom: 0; }
-  .level-label { font-size: 12px; font-weight: 700; min-width: 90px; flex-shrink: 0; }
-  .level-bar-wrap { flex: 1; height: 8px; background: var(--border); border-radius: 10px; overflow: hidden; }
-  .level-bar { height: 100%; border-radius: 10px; }
-  .level-val { font-size: 12px; font-weight: 700; min-width: 60px; text-align: left; color: var(--muted); }
+    async function handleLogout() {
+      await signOut(auth);
+      showView("home");
+    }
 
-  .tips-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
-  .tip-item { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.7; color: var(--muted); }
-  .tip-dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 7px; flex-shrink: 0; }
-  .sfx   .tip-dot { background: var(--sfx); }
-  .foley .tip-dot { background: var(--foley); }
-  .amb   .tip-dot { background: var(--amb); }
-  .org   .tip-dot { background: var(--green); }
+    /* ===================== POSTS CRUD ===================== */
+    async function loadPosts(publishedOnly = true) {
+      try {
+        let q;
+        if (publishedOnly) {
+          q = query(collection(db, "posts"), where("published", "==", true), orderBy("createdAt", "desc"));
+        } else {
+          q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+        }
+        const snap = await getDocs(q);
+        allPosts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        return allPosts;
+      } catch (err) {
+        console.error(err);
+        return [];
+      }
+    }
 
-  .divider { height: 1px; background: var(--border); margin: 18px 0; }
+    async function savePost(postData, id = null) {
+      if (id) {
+        await updateDoc(doc(db, "posts", id), { ...postData, updatedAt: serverTimestamp() });
+      } else {
+        await addDoc(collection(db, "posts"), { ...postData, createdAt: serverTimestamp() });
+      }
+    }
 
-  /* Sites grid */
-  .sites-grid { display: flex; flex-direction: column; gap: 8px; }
-  .site-row {
-    background: var(--surface2);
-    border-radius: 10px;
-    padding: 12px 14px;
-    display: flex; align-items: flex-start; gap: 12px;
-  }
-  .site-badge {
-    font-size: 10px; font-weight: 800; letter-spacing: .8px;
-    padding: 3px 9px; border-radius: 6px; flex-shrink: 0; margin-top: 2px;
-  }
-  .free  { background: rgba(74,222,128,.15); color: #4ade80; border: 1px solid rgba(74,222,128,.3); }
-  .paid  { background: rgba(249,115,22,.12); color: #f97316; border: 1px solid rgba(249,115,22,.3); }
-  .mixed { background: rgba(167,139,250,.12); color: #a78bfa; border: 1px solid rgba(167,139,250,.3); }
-  .site-info .site-name { font-size: 13px; font-weight: 700; color: var(--text); }
-  .site-info .site-desc { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
+    async function deletePost(id) {
+      await deleteDoc(doc(db, "posts", id));
+    }
 
-  /* Folder tree */
-  .folder-tree {
-    background: #080a0f;
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 18px 20px;
-    font-family: monospace;
-    font-size: 13px;
-    line-height: 2;
-    overflow-x: auto;
-  }
-  .f-root  { color: #4ade80; font-weight: 700; }
-  .f-l1    { color: #22d3ee; padding-right: 18px; }
-  .f-l2    { color: #a78bfa; padding-right: 36px; }
-  .f-l3    { color: var(--muted); padding-right: 54px; }
-  .f-note  { color: #3a4258; font-size: 11px; }
+    async function togglePublish(id, current) {
+      await updateDoc(doc(db, "posts", id), { published: !current });
+    }
 
-  /* comparison */
-  .comp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .comp-table th {
-    padding: 10px 12px; text-align: right;
-    font-weight: 700; font-size: 11px; letter-spacing: 1px;
-    color: var(--muted); background: var(--surface2);
-    border-bottom: 1px solid var(--border);
-  }
-  .comp-table td { padding: 11px 12px; border-bottom: 1px solid var(--border); line-height: 1.5; }
-  .comp-table tr:last-child td { border-bottom: none; }
-  .comp-table .type-cell { font-weight: 700; width: 26%; }
-  .t-sfx   { color: var(--sfx); }
-  .t-foley { color: var(--foley); }
-  .t-amb   { color: var(--amb); }
+    /* ===================== SUBSCRIBERS ===================== */
+    async function subscribe(email) {
+      const q = query(collection(db, "subscribers"), where("email", "==", email));
+      const snap = await getDocs(q);
+      if (!snap.empty) return "exists";
+      await addDoc(collection(db, "subscribers"), { email, subscribedAt: serverTimestamp() });
+      return "ok";
+    }
 
-  .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 32px; }
-  .footer span { color: var(--sfx); }
-</style>
+    /* ===================== HOME VIEW ===================== */
+    async function renderHome() {
+      const grid = document.getElementById("posts-grid");
+      const loader = document.getElementById("posts-loader");
+      if (!grid) return;
+      grid.innerHTML = "";
+      if (loader) loader.style.display = "flex";
+      const posts = await loadPosts(true);
+      if (loader) loader.style.display = "none";
+
+      if (!posts.length) {
+        grid.innerHTML = `<div class="empty-state"><div class="empty-icon">📚</div><p>لا توجد مقالات منشورة بعد</p></div>`;
+        return;
+      }
+
+      const grouped = {};
+      posts.forEach(p => {
+        const cat = p.category || "عام";
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(p);
+      });
+
+      Object.entries(grouped).forEach(([cat, items]) => {
+        const section = document.createElement("div");
+        section.className = "category-section";
+        section.innerHTML = `<h2 class="category-title"><span>${cat}</span></h2>`;
+        const cardGrid = document.createElement("div");
+        cardGrid.className = "cards-grid";
+        items.forEach(post => {
+          const card = buildCard(post);
+          cardGrid.appendChild(card);
+        });
+        section.appendChild(cardGrid);
+        grid.appendChild(section);
+      });
+    }
+
+    function buildCard(post) {
+      const card = document.createElement("div");
+      card.className = "post-card";
+      const tags = (post.tags || []).map(t => `<span class="tag">${t}</span>`).join("");
+      card.innerHTML = `
+        <div class="card-header">
+          <span class="card-icon">${post.icon || "📄"}</span>
+          <span class="card-category">${post.category || "عام"}</span>
+        </div>
+        <h3 class="card-title">${post.title || "بدون عنوان"}</h3>
+        <p class="card-subtitle">${post.subtitle || ""}</p>
+        <div class="card-footer">
+          <div class="tags-row">${tags}</div>
+          <span class="read-time">⏱ ${post.readTime || "5"} دقائق</span>
+        </div>
+      `;
+      card.addEventListener("click", () => showView("post", post));
+      return card;
+    }
+
+    /* ===================== SINGLE POST VIEW ===================== */
+    function renderPost(post) {
+      currentPost = post;
+      const container = document.getElementById("post-content");
+      if (!container) return;
+      const tags = (post.tags || []).map(t => `<span class="tag">${t}</span>`).join("");
+      const date = post.createdAt?.toDate
+        ? post.createdAt.toDate().toLocaleDateString("ar-EG", { year: "numeric", month: "long", day: "numeric" })
+        : "";
+
+      container.innerHTML = `
+        <div class="post-header-meta">
+          <span class="post-icon-big">${post.icon || "📄"}</span>
+          <span class="post-cat-badge">${post.category || "عام"}</span>
+        </div>
+        <h1 class="post-title gradient-text">${post.title || ""}</h1>
+        <p class="post-subtitle">${post.subtitle || ""}</p>
+        <div class="post-meta-row">
+          <span>📅 ${date}</span>
+          <span>⏱ ${post.readTime || "5"} دقائق قراءة</span>
+        </div>
+        <div class="tags-row post-tags">${tags}</div>
+        <hr class="post-divider" />
+        <div class="post-body">${post.content || ""}</div>
+      `;
+    }
+
+    /* ===================== LOGIN VIEW ===================== */
+    function renderLoginView() {
+      // static, already in HTML
+    }
+
+    /* ===================== DASHBOARD ===================== */
+    async function renderDashboard() {
+      if (!isAdmin) { showView("home"); return; }
+      const posts = await loadPosts(false);
+      const list = document.getElementById("dash-posts-list");
+      if (!list) return;
+      list.innerHTML = "";
+
+      if (!posts.length) {
+        list.innerHTML = `<div class="empty-state"><p>لا توجد مقالات بعد</p></div>`;
+        return;
+      }
+
+      posts.forEach(post => {
+        const item = document.createElement("div");
+        item.className = "dash-post-item";
+        item.innerHTML = `
+          <div class="dash-post-info">
+            <span class="dash-post-icon">${post.icon || "📄"}</span>
+            <div>
+              <div class="dash-post-title">${post.title || "بدون عنوان"}</div>
+              <div class="dash-post-cat">${post.category || "عام"} • ${post.readTime || "5"} دقائق</div>
+            </div>
+          </div>
+          <div class="dash-post-status">
+            <span class="status-badge ${post.published ? "published" : "draft"}">${post.published ? "منشور" : "مسودة"}</span>
+          </div>
+          <div class="dash-actions">
+            <button class="btn-icon btn-preview" title="معاينة" data-id="${post.id}">👁</button>
+            <button class="btn-icon btn-publish ${post.published ? "btn-unpublish" : "btn-pub"}" title="${post.published ? "إلغاء النشر" : "نشر"}" data-id="${post.id}" data-pub="${post.published}">
+              ${post.published ? "🔒" : "🚀"}
+            </button>
+            <button class="btn-icon btn-edit" title="تعديل" data-id="${post.id}">✏️</button>
+            <button class="btn-icon btn-delete" title="حذف" data-id="${post.id}">🗑</button>
+          </div>
+        `;
+        list.appendChild(item);
+      });
+
+      // Event delegation
+      list.querySelectorAll(".btn-preview").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const p = allPosts.find(x => x.id === btn.dataset.id);
+          if (p) showView("post", p);
+        });
+      });
+      list.querySelectorAll(".btn-publish").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          await togglePublish(btn.dataset.id, btn.dataset.pub === "true");
+          renderDashboard();
+        });
+      });
+      list.querySelectorAll(".btn-edit").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const p = allPosts.find(x => x.id === btn.dataset.id);
+          if (p) openPostEditor(p);
+        });
+      });
+      list.querySelectorAll(".btn-delete").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (confirm("هل تريد حذف هذا المقال؟")) {
+            await deletePost(btn.dataset.id);
+            renderDashboard();
+          }
+        });
+      });
+    }
+
+    /* ===================== POST EDITOR ===================== */
+    function openPostEditor(post = null) {
+      editingPostId = post ? post.id : null;
+      const modal = document.getElementById("editor-modal");
+      if (!modal) return;
+
+      document.getElementById("editor-title").textContent = post ? "تعديل المقال" : "مقال جديد";
+      document.getElementById("field-title").value = post?.title || "";
+      document.getElementById("field-subtitle").value = post?.subtitle || "";
+      document.getElementById("field-category").value = post?.category || "";
+      document.getElementById("field-icon").value = post?.icon || "📄";
+      document.getElementById("field-tags").value = (post?.tags || []).join(", ");
+      document.getElementById("field-readtime").value = post?.readTime || "5";
+      document.getElementById("field-content").value = post?.content || "";
+      document.getElementById("field-published").checked = post?.published || false;
+
+      modal.classList.add("active");
+    }
+
+    function closeEditor() {
+      const modal = document.getElementById("editor-modal");
+      if (modal) modal.classList.remove("active");
+      editingPostId = null;
+    }
+
+    async function handleSavePost(e) {
+      e.preventDefault();
+      const btn = document.getElementById("btn-save-post");
+      btn.disabled = true;
+      btn.textContent = "جارٍ الحفظ...";
+
+      const tagsRaw = document.getElementById("field-tags").value;
+      const tags = tagsRaw.split(",").map(t => t.trim()).filter(Boolean);
+
+      const data = {
+        title: document.getElementById("field-title").value.trim(),
+        subtitle: document.getElementById("field-subtitle").value.trim(),
+        category: document.getElementById("field-category").value.trim(),
+        icon: document.getElementById("field-icon").value.trim(),
+        tags,
+        readTime: document.getElementById("field-readtime").value.trim(),
+        content: document.getElementById("field-content").value,
+        published: document.getElementById("field-published").checked,
+      };
+
+      try {
+        await savePost(data, editingPostId);
+        closeEditor();
+        renderDashboard();
+      } catch (err) {
+        alert("حدث خطأ أثناء الحفظ: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "💾 حفظ المقال";
+      }
+    }
+
+    /* ===================== SUBSCRIBE ===================== */
+    async function handleSubscribe(e) {
+      e.preventDefault();
+      const emailEl = document.getElementById("sub-email");
+      const msgEl = document.getElementById("sub-msg");
+      const email = emailEl.value.trim();
+      if (!email) return;
+      msgEl.textContent = "جارٍ التسجيل...";
+      msgEl.className = "sub-msg";
+      try {
+        const result = await subscribe(email);
+        if (result === "exists") {
+          msgEl.textContent = "✅ أنت مسجل بالفعل!";
+        } else {
+          msgEl.textContent = "🎉 تم التسجيل بنجاح! سنعلمك بكل جديد.";
+          emailEl.value = "";
+        }
+        msgEl.className = "sub-msg success";
+      } catch (err) {
+        msgEl.textContent = "❌ حدث خطأ، حاول مرة أخرى.";
+        msgEl.className = "sub-msg error";
+      }
+    }
+
+    /* ===================== INIT ===================== */
+    window.addEventListener("DOMContentLoaded", () => {
+      // Nav buttons
+      document.getElementById("nav-login-btn")?.addEventListener("click", () => showView("login"));
+      document.getElementById("nav-logout-btn")?.addEventListener("click", handleLogout);
+      document.getElementById("nav-dash-btn")?.addEventListener("click", () => showView("dashboard"));
+      document.getElementById("nav-logo")?.addEventListener("click", () => showView("home"));
+
+      // Login form
+      document.getElementById("login-form")?.addEventListener("submit", handleLogin);
+
+      // Post back btn
+      document.getElementById("post-back-btn")?.addEventListener("click", () => showView("home"));
+      document.getElementById("dash-back-btn")?.addEventListener("click", () => showView("home"));
+
+      // Dashboard new post
+      document.getElementById("btn-new-post")?.addEventListener("click", () => openPostEditor(null));
+
+      // Editor
+      document.getElementById("editor-form")?.addEventListener("submit", handleSavePost);
+      document.getElementById("btn-close-editor")?.addEventListener("click", closeEditor);
+      document.getElementById("editor-modal")?.addEventListener("click", e => {
+        if (e.target.id === "editor-modal") closeEditor();
+      });
+
+      // Preview in editor
+      document.getElementById("btn-preview-editor")?.addEventListener("click", () => {
+        const tagsRaw = document.getElementById("field-tags").value;
+        const tags = tagsRaw.split(",").map(t => t.trim()).filter(Boolean);
+        const previewPost = {
+          title: document.getElementById("field-title").value,
+          subtitle: document.getElementById("field-subtitle").value,
+          category: document.getElementById("field-category").value,
+          icon: document.getElementById("field-icon").value,
+          tags,
+          readTime: document.getElementById("field-readtime").value,
+          content: document.getElementById("field-content").value,
+        };
+        closeEditor();
+        showView("post", previewPost);
+      });
+
+      // Subscribe
+      document.getElementById("sub-form")?.addEventListener("submit", handleSubscribe);
+
+      // Start
+      showView("home");
+    });
+
+    // Expose to window so inline HTML can call if needed
+    window._app = { showView };
+  </script>
+
+  <style>
+    :root {
+      --bg: #0d0f14;
+      --bg2: #13161e;
+      --bg3: #1a1e2a;
+      --border: rgba(255,255,255,0.07);
+      --text: #e8eaf0;
+      --text2: #8b90a8;
+      --text3: #5c6080;
+      --accent: #6c63ff;
+      --accent2: #a78bfa;
+      --accent3: #38bdf8;
+      --green: #22c55e;
+      --red: #ef4444;
+      --orange: #f97316;
+      --radius: 16px;
+      --radius-sm: 10px;
+      --shadow: 0 8px 32px rgba(0,0,0,0.4);
+      --font: 'Cairo', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      direction: rtl;
+      min-height: 100vh;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    /* ---- BACKGROUND ---- */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 0%, rgba(108,99,255,0.12) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 100%, rgba(56,189,248,0.08) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ---- NAV ---- */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(13,15,20,0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #nav-logo {
+      font-size: 1.3rem;
+      font-weight: 800;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--accent), var(--accent3));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      user-select: none;
+      letter-spacing: -0.5px;
+    }
+
+    .nav-actions { display: flex; gap: 10px; align-items: center; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 18px;
+      border: none;
+      border-radius: 50px;
+      font-family: var(--font);
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      color: #fff;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(108,99,255,0.4); }
+
+    .btn-ghost {
+      background: var(--bg3);
+      color: var(--text2);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--bg2); color: var(--text); }
+
+    .btn-danger { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+    .btn-danger:hover { background: var(--red); color: #fff; }
+
+    .btn-success { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
+    .btn-success:hover { background: var(--green); color: #fff; }
+
+    /* ---- VIEWS ---- */
+    .view { display: none; position: relative; z-index: 1; }
+    .view.active { display: block; }
+
+    /* ---- HOME VIEW ---- */
+    .home-hero {
+      text-align: center;
+      padding: 80px 24px 60px;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .hero-badge {
+      display: inline-block;
+      background: rgba(108,99,255,0.15);
+      border: 1px solid rgba(108,99,255,0.3);
+      color: var(--accent2);
+      border-radius: 50px;
+      padding: 6px 18px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      margin-bottom: 24px;
+      letter-spacing: 0.3px;
+    }
+
+    .hero-title {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 900;
+      line-height: 1.2;
+      margin-bottom: 16px;
+      letter-spacing: -1px;
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, #a78bfa, #38bdf8, #6c63ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-desc { color: var(--text2); font-size: 1.05rem; max-width: 500px; margin: 0 auto 32px; }
+
+    /* ---- CATEGORY SECTION ---- */
+    .category-section { margin-bottom: 56px; }
+    .category-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text2);
+      margin-bottom: 20px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .category-title::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ---- CARDS GRID ---- */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+      padding: 0 16px;
+    }
+
+    .post-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      cursor: pointer;
+      transition: all 0.25s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .post-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(108,99,255,0.05) 0%, transparent 60%);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .post-card:hover {
+      border-color: rgba(108,99,255,0.35);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(108,99,255,0.15);
+    }
+
+    .post-card:hover::before { opacity: 1; }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .card-icon { font-size: 1.8rem; }
+
+    .card-category {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--accent2);
+      background: rgba(167,139,250,0.1);
+      border: 1px solid rgba(167,139,250,0.2);
+      border-radius: 50px;
+      padding: 3px 12px;
+      letter-spacing: 0.2px;
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+      line-height: 1.4;
+    }
+
+    .card-subtitle {
+      font-size: 0.88rem;
+      color: var(--text2);
+      line-height: 1.6;
+      margin-bottom: 16px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .tag {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--accent3);
+      background: rgba(56,189,248,0.08);
+      border: 1px solid rgba(56,189,248,0.15);
+      border-radius: 50px;
+      padding: 2px 10px;
+    }
+
+    .read-time { font-size: 0.78rem; color: var(--text3); white-space: nowrap; }
+
+    /* ---- LOADER ---- */
+    #posts-loader {
+      display: flex;
+      justify-content: center;
+      padding: 80px;
+    }
+
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ---- EMPTY STATE ---- */
+    .empty-state {
+      text-align: center;
+      padding: 80px 24px;
+      color: var(--text2);
+    }
+    .empty-icon { font-size: 3rem; margin-bottom: 16px; }
+
+    /* ---- POSTS CONTAINER ---- */
+    #posts-container { max-width: 1200px; margin: 0 auto; padding: 0 16px 80px; }
+
+    /* ---- SUBSCRIBE SECTION ---- */
+    .subscribe-section {
+      max-width: 560px;
+      margin: 0 auto 80px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 40px 32px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .subscribe-section::before {
+      content: "";
+      position: absolute;
+      top: -50%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(ellipse, rgba(108,99,255,0.08) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .subscribe-section h3 {
+      font-size: 1.3rem;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .subscribe-section p { color: var(--text2); font-size: 0.9rem; margin-bottom: 20px; }
+
+    .sub-input-row {
+      display: flex;
+      gap: 10px;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    .input {
+      flex: 1;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      padding: 10px 18px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+      direction: ltr;
+    }
+    .input:focus { border-color: var(--accent); }
+    .input::placeholder { color: var(--text3); }
+
+    .sub-msg { font-size: 0.85rem; margin-top: 12px; color: var(--text2); }
+    .sub-msg.success { color: var(--green); }
+    .sub-msg.error { color: var(--red); }
+
+    /* ---- SINGLE POST VIEW ---- */
+    #view-post {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+    }
+
+    .post-back-bar {
+      margin-bottom: 32px;
+    }
+
+    .post-header-meta {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .post-icon-big { font-size: 2.5rem; }
+
+    .post-cat-badge {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--accent2);
+      background: rgba(167,139,250,0.12);
+      border: 1px solid rgba(167,139,250,0.25);
+      border-radius: 50px;
+      padding: 4px 14px;
+    }
+
+    .post-title {
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      font-weight: 900;
+      line-height: 1.25;
+      margin-bottom: 12px;
+      letter-spacing: -0.5px;
+    }
+
+    .post-subtitle {
+      font-size: 1.05rem;
+      color: var(--text2);
+      margin-bottom: 16px;
+    }
+
+    .post-meta-row {
+      display: flex;
+      gap: 20px;
+      color: var(--text3);
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+    }
+
+    .post-tags { margin-bottom: 28px; }
+
+    .post-divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin-bottom: 32px;
+    }
+
+    .post-body {
+      font-size: 1rem;
+      line-height: 1.9;
+      color: var(--text);
+    }
+
+    .post-body h1, .post-body h2, .post-body h3 {
+      font-weight: 700;
+      margin: 28px 0 14px;
+      color: var(--text);
+    }
+    .post-body h2 { font-size: 1.35rem; }
+    .post-body h3 { font-size: 1.15rem; }
+
+    .post-body p { margin-bottom: 16px; }
+
+    .post-body code {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-size: 0.88em;
+      font-family: 'Courier New', monospace;
+      color: var(--accent3);
+      direction: ltr;
+      display: inline-block;
+    }
+
+    .post-body pre {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 20px;
+      overflow-x: auto;
+      margin: 20px 0;
+      direction: ltr;
+    }
+
+    .post-body pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      display: block;
+    }
+
+    .post-body ul, .post-body ol {
+      margin: 16px 0 16px 0;
+      padding-right: 24px;
+    }
+    .post-body li { margin-bottom: 8px; }
+
+    .post-body blockquote {
+      border-right: 3px solid var(--accent);
+      background: rgba(108,99,255,0.06);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      padding: 14px 20px;
+      margin: 20px 0;
+      color: var(--text2);
+      font-style: italic;
+    }
+
+    .post-body strong { color: var(--text); font-weight: 700; }
+    .post-body a { color: var(--accent2); text-decoration: underline; }
+    .post-body a:hover { color: var(--accent3); }
+
+    /* ---- LOGIN VIEW ---- */
+    #view-login {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(100vh - 64px);
+      padding: 40px 24px;
+    }
+
+    .login-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: var(--shadow);
+    }
+
+    .login-card h2 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .login-card p { color: var(--text2); font-size: 0.9rem; margin-bottom: 32px; }
+
+    .form-group { margin-bottom: 18px; }
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text2);
+      margin-bottom: 8px;
+    }
+
+    .input-full {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+      direction: ltr;
+      text-align: right;
+    }
+    .input-full:focus { border-color: var(--accent); }
+
+    #login-error {
+      color: var(--red);
+      font-size: 0.85rem;
+      margin-bottom: 14px;
+      min-height: 20px;
+    }
+
+    /* ---- DASHBOARD VIEW ---- */
+    #view-dashboard {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+    }
+
+    .dash-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+
+    .dash-header h2 { font-size: 1.6rem; font-weight: 800; }
+
+    .dash-post-item {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 12px;
+      transition: border-color 0.2s;
+      flex-wrap: wrap;
+    }
+    .dash-post-item:hover { border-color: rgba(108,99,255,0.3); }
+
+    .dash-post-info {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .dash-post-icon { font-size: 1.8rem; flex-shrink: 0; }
+
+    .dash-post-title {
+      font-weight: 700;
+      font-size: 0.98rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dash-post-cat { font-size: 0.8rem; color: var(--text3); margin-top: 2px; }
+
+    .dash-post-status { flex-shrink: 0; }
+
+    .status-badge {
+      font-size: 0.75rem;
+      font-weight: 700;
+      border-radius: 50px;
+      padding: 4px 12px;
+      border: 1px solid;
+    }
+    .status-badge.published {
+      color: var(--green);
+      background: rgba(34,197,94,0.1);
+      border-color: rgba(34,197,94,0.2);
+    }
+    .status-badge.draft {
+      color: var(--orange);
+      background: rgba(249,115,22,0.1);
+      border-color: rgba(249,115,22,0.2);
+    }
+
+    .dash-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+    .btn-icon {
+      width: 36px; height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg3);
+      cursor: pointer;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.18s;
+    }
+    .btn-icon:hover { border-color: var(--accent); transform: scale(1.05); }
+    .btn-delete:hover { background: rgba(239,68,68,0.15); border-color: var(--red); }
+    .btn-edit:hover { background: rgba(56,189,248,0.1); border-color: var(--accent3); }
+
+    /* ---- EDITOR MODAL ---- */
+    #editor-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(6px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    #editor-modal.active { display: flex; }
+
+    .editor-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 36px 32px;
+      width: 100%;
+      max-width: 700px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+    }
+
+    .editor-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+
+    #editor-title { font-size: 1.4rem; font-weight: 800; }
+
+    .editor-close {
+      width: 36px; height: 36px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.18s;
+      color: var(--text2);
+    }
+    .editor-close:hover { background: var(--red); color: #fff; border-color: var(--red); }
+
+    .editor-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .editor-grid .span-2 { grid-column: 1 / -1; }
+
+    .editor-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+
+    .checkbox-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .checkbox-row span { font-size: 0.9rem; font-weight: 600; color: var(--text2); }
+
+    textarea.input-full {
+      resize: vertical;
+      min-height: 220px;
+      line-height: 1.7;
+    }
+
+    .editor-actions { display: flex; gap: 10px; }
+
+    /* ---- FOOTER ---- */
+    footer {
+      text-align: center;
+      padding: 32px 24px;
+      color: var(--text3);
+      font-size: 0.82rem;
+      border-top: 1px solid var(--border);
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ---- RESPONSIVE ---- */
+    @media (max-width: 640px) {
+      .cards-grid { grid-template-columns: 1fr; }
+      .editor-grid { grid-template-columns: 1fr; }
+      .editor-grid .span-2 { grid-column: 1; }
+      .login-card { padding: 32px 24px; }
+      .editor-card { padding: 24px 20px; }
+      .sub-input-row { flex-direction: column; }
+      .dash-post-item { flex-direction: column; align-items: flex-start; }
+      nav { padding: 0 16px; }
+      #nav-logo { font-size: 1.1rem; }
+    }
+
+    /* ---- ANIMATIONS ---- */
+    .view.active { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .post-card { animation: cardIn 0.4s ease both; }
+    @keyframes cardIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
 </head>
 <body>
 
-<div class="header">
-  <div class="badge">Sound Design Guide · Premiere Pro</div>
-  <h1>🔊 دليل الـ Sound Design الشامل</h1>
-  <p>SFX · Foley · Ambience — تعريف + إفيكتات Premiere Pro + مواقع + تنظيم الفولدرز</p>
-</div>
-
-
-<!-- ═══════════ SFX ═══════════ -->
-<div class="section-card sfx">
-  <div class="section-header">
-    <div class="section-icon">⚡</div>
-    <div class="section-title-wrap">
-      <h2>Sound Effects — SFX</h2>
-      <p>أصوات مصممة لتضخيم الحدث البصري</p>
-    </div>
+<!-- =================== NAVBAR =================== -->
+<nav>
+  <div id="nav-logo">🎓 منصة التعلم</div>
+  <div class="nav-actions">
+    <button id="nav-dash-btn" class="btn btn-ghost" style="display:none">⚙️ لوحة التحكم</button>
+    <button id="nav-login-btn" class="btn btn-primary">🔐 دخول الأدمن</button>
+    <button id="nav-logout-btn" class="btn btn-ghost" style="display:none">خروج 👋</button>
   </div>
-  <div class="section-body">
+</nav>
 
-    <div class="def-box">
-      الـ SFX هي أصوات <strong>مصنوعة أو معدّلة</strong> هدفها الوحيد إنها تضخّم التأثير البصري وتخلّي المشاهد <em>يحسّ</em> باللحظة. مش لازم تكون واقعية خالص — المهم تكون مؤثرة في السياق. في الـ Reels هي الأقوى تأثيرًا على الـ Retention لأنها بتربط الأذن بالعين.
+<!-- =================== HOME VIEW =================== -->
+<div id="view-home" class="view">
+  <div class="home-hero">
+    <div class="hero-badge">✨ تعلّم • اكتشف • تطوّر</div>
+    <h1 class="hero-title">
+      <span class="gradient-text">محتوى تعليمي</span><br />
+      يصنع الفارق
+    </h1>
+    <p class="hero-desc">مقالات وشروحات مختارة في التقنية والبرمجة وكل ما يهمك.</p>
+  </div>
+
+  <div id="posts-container">
+    <div id="posts-loader" style="display:none">
+      <div class="spinner"></div>
     </div>
+    <div id="posts-grid"></div>
+  </div>
 
-    <div class="sub-label">أمثلة مفصّلة</div>
-    <div class="examples-grid">
-      <span class="tag">Whoosh — انتقالات</span>
-      <span class="tag">Impact Hit — ضربات</span>
-      <span class="tag">Riser — تصاعد</span>
-      <span class="tag">Cinematic Drop</span>
-      <span class="tag">Glitch — تشويش</span>
-      <span class="tag">Zap — كهرباء</span>
-      <span class="tag">Swoosh — حركة</span>
-      <span class="tag">Boom — انفجار</span>
-      <span class="tag">Reverse Whoosh</span>
-      <span class="tag">Tape Stop</span>
-      <span class="tag">Digital Beep</span>
-      <span class="tag">Vinyl Scratch</span>
+  <!-- Subscribe Section -->
+  <div style="padding: 0 16px;">
+    <div class="subscribe-section" style="margin: 0 auto 80px;">
+      <h3>🔔 تابع كل جديد</h3>
+      <p>سجّل إيميلك وكن أول من يعلم بالمقالات الجديدة</p>
+      <form id="sub-form">
+        <div class="sub-input-row">
+          <input type="email" id="sub-email" class="input" placeholder="your@email.com" required />
+          <button type="submit" class="btn btn-primary">متابعة</button>
+        </div>
+        <div id="sub-msg" class="sub-msg"></div>
+      </form>
     </div>
-
-    <div class="divider"></div>
-    <div class="sub-label">الإفيكتات في Premiere Pro</div>
-    <div class="effects-list">
-
-      <div class="effect-row">
-        <div class="effect-name">Pitch Shifter</div>
-        <div class="effect-path">Audio Effects → Time and Pitch → Pitch Shifter</div>
-        <div class="effect-desc">غيّر الـ Pitch Scale — قيمة موجبة للصوت الأعلى، سالبة للأعمق. الـ Whoosh بيبقى أكثر تأثيرًا بـ -3 إلى -5 semitones. الـ Hits بتبقى أثقل بـ -6.</div>
-        <div class="effect-tip">💡 في: Effect Controls → Pitch Shifter → Pitch: -4 للـ heavy whoosh</div>
-      </div>
-
-      <div class="effect-row">
-        <div class="effect-name">Studio Reverb</div>
-        <div class="effect-path">Audio Effects → Reverb → Studio Reverb</div>
-        <div class="effect-desc">استخدم Decay Time قصير (0.3–0.8s) للـ SFX علشان ما يطولش ويظل Sharp. Room Size صغير (20–30%) يضيف حضور من غير ما يلوّث الـ Mix.</div>
-        <div class="effect-tip">💡 Decay: 0.5s / Room Size: 25% / Dry Mix: 70%</div>
-      </div>
-
-      <div class="effect-row">
-        <div class="effect-name">Parametric Equalizer</div>
-        <div class="effect-path">Audio Effects → Filter and EQ → Parametric Equalizer</div>
-        <div class="effect-desc">للـ Hits: بوست في 60–80Hz (Sub) يضيف الثقل، وبوست في 3–5kHz (Presence) يضيف الحدّة. قطع الـ Mud في 200–400Hz علشان الصوت ينظّف.</div>
-        <div class="effect-tip">💡 Low Shelf +3dB عند 80Hz — High Shelf +2dB عند 8kHz</div>
-      </div>
-
-      <div class="effect-row">
-        <div class="effect-name">Dynamics Processing</div>
-        <div class="effect-path">Audio Effects → Amplitude and Compression → Dynamics</div>
-        <div class="effect-desc">Compressor: Attack 5ms / Release 50ms / Ratio 4:1 — بيخلّي الـ Transient (أول لحظة) واضح وقوي، وبعدين يتحكم في الـ Tail. الـ SFX بتبقى أحدّ وأكثر Punch.</div>
-        <div class="effect-tip">💡 Threshold: -12dB / Ratio: 4:1 / Attack: 5ms</div>
-      </div>
-
-      <div class="effect-row">
-        <div class="effect-name">Delay</div>
-        <div class="effect-path">Audio Effects → Delay and Echo → Delay</div>
-        <div class="effect-desc">Delay Time: 20–40ms (Short Slap) يضيف عمق وامتداد بسيط للـ Transitions بدون ما يبقى واضح كـ Echo. Feedback: 0–10% بس.</div>
-        <div class="effect-tip">💡 مناسب للـ Whoosh على الـ Cuts — مش للـ Hits</div>
-      </div>
-
-      <div class="effect-row">
-        <div class="effect-name">Speed / Duration (لتوقيت الـ SFX)</div>
-        <div class="effect-path">Clip سودوكليك → Speed/Duration → Reverse Speed</div>
-        <div class="effect-desc">الـ Reverse على أي SFX بيخلق Transition مختلف تمامًا — Reverse Whoosh مثلًا بيبقى كـ "سحب" قبل الـ Cut. جرّب تعكس أي صوت عندك.</div>
-        <div class="effect-tip">💡 Right Click على الكليب → Speed/Duration → Reverse Speed ✓</div>
-      </div>
-
-    </div>
-
-    <div class="divider"></div>
-    <div class="sub-label">مستويات الصوت (Audio Levels)</div>
-    <div class="levels-block">
-      <div class="level-row">
-        <span class="level-label">SFX عادي</span>
-        <div class="level-bar-wrap"><div class="level-bar" style="width:68%;background:var(--sfx);"></div></div>
-        <span class="level-val">-12 dB</span>
-      </div>
-      <div class="level-row">
-        <span class="level-label">Big Impact Hit</span>
-        <div class="level-bar-wrap"><div class="level-bar" style="width:88%;background:var(--sfx);"></div></div>
-        <span class="level-val">-6 dB</span>
-      </div>
-      <div class="level-row">
-        <span class="level-label">Transition Whoosh</span>
-        <div class="level-bar-wrap"><div class="level-bar" style="width:52%;background:#fb923c;"></div></div>
-        <span class="level-val">-18 dB</span>
-      </div>
-      <div class="level-row">
-        <span class="level-label">مع Voiceover</span>
-        <div class="level-bar-wrap"><div class="level-bar" style="width:40%;background:#fb923c;"></div></div>
-        <span class="level-val">-20 dB</span>
-      </div>
-    </div>
-
-    <div class="sub-label" style="margin-top:18px">نصايح عملية</div>
-    <div class="tips-list">
-      <div class="tip-item"><div class="tip-dot"></div><span>حط الـ SFX على الـ <strong>Cut Point بالظبط</strong> — فريم قبل أو بعد بيكسر الإحساس</span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span>الـ <strong>Whoosh</strong> ابدأه قبل الـ Cut بـ 2–3 فريم عشان "يمهّد" للانتقال</span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span>الـ <strong>Riser</strong> حطّه قبل الـ Big Reveal أو Drop بـ 1–2 ثانية بالظبط</span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span>الـ Hits متحطّش على <strong>كل حاجة</strong> — اختار اللحظات اللي فيها Impact حقيقي بس</span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span>استخدم الـ <strong>Keyframe</strong> في Premiere عشان تعمل Volume Fade In/Out على كل SFX بدل ما يبدأ فجأة</span></div>
-    </div>
-
   </div>
 </div>
 
-
-<!-- ═══════════ FOLEY ═══════════ -->
-<div class="section-card foley">
-  <div class="section-header">
-    <div class="section-icon">🎹</div>
-    <div class="section-title-wrap">
-      <h2>Foley</h2>
-      <p>أصوات واقعية بتضيف الحياة للمشهد</p>
-    </div>
+<!-- =================== POST VIEW =================== -->
+<div id="view-post" class="view">
+  <div class="post-back-bar">
+    <button id="post-back-btn" class="btn btn-ghost" style="margin: 20px 24px 0">← العودة للرئيسية</button>
   </div>
-  <div class="section-body">
+  <div id="post-content"></div>
+</div>
 
-    <div class="def-box">
-      الـ Foley هي أصوات <strong>محاكاة للواقع</strong> بتتسجّل أو تتحمّل منفصلة وبتتضاف على المشهد. وظيفتها إنها تخلّي المشاهد يحسّ إنه "في" المحتوى. الكاميرا بتشوف، الـ Foley بتخلّي الـ Brain يصدّق. مهمة جدًا في الـ Educational Content لأنها بتضيف دفا وإنسانية على المحتوى الجاف.
-    </div>
-
-    <div class="sub-label">أمثلة مفصّلة</div>
-    <div class="examples-grid">
-      <span class="tag">Keyboard Typing</span>
-      <span class="tag">Mouse Click</span>
-      <span class="tag">خطوات على أرضية</span>
-      <span class="tag">فتح / قفل باب</span>
-      <span class="tag">ورق بيتقلب</span>
-      <span class="tag">قلم بيكتب</span>
-      <span class="tag">كوباية على تيبل</span>
-      <span class="tag">سحب كرسي</span>
-      <span class="tag">Zipper</span>
-      <span class="tag">Clothes Rustle</span>
-      <span class="tag">Phone Tap</span>
-      <span class="tag">Notebook Open</span>
-    </div>
-
-    <div class="divider"></div>
-    <div class="sub-label">الإفيكتات في Premiere Pro</div>
-    <div class="effects-list">
-
-      <div class="effect-row">
-        <div class="effect-name">Parametric Equalizer — Mid Cut</div>
-        <div class="effect-path">Audio Effects → Filter and EQ → Parametric Equalizer</div>
-        <div class="effect-desc">قطع الـ Harsh Frequencies (2–5kHz) بـ -3 إلى -6dB علشان الـ Foley ما يبقاش "زعيق" وبيمشي تحت الـ Voiceover في راحة. ارفع الـ Air (12kHz+) بسيط للـ Freshness.</div>
-        <div class="effect-tip">💡 Bell Filter عند 3.5kHz: -4dB / Q: 1.5</div>
+<!-- =================== LOGIN VIEW =================== -->
+<div id="view-login" class="view">
+  <div class="login-card">
+    <h2>🔐 دخول الأدمن</h2>
+    <p>هذه الصفحة للأدمن فقط</p>
+    <form id="login-form">
+      <div class="form-group">
+        <label>البريد الإلكتروني</label>
+        <input type="email" id="login-email" class="input-full" placeholder="admin@example.com" required />
       </div>
-
-      <div class="effect-row">
-        <div class="effect-name">High Pass Filter</div>
-        <div class="effect-path">Audio Effects → Filter and EQ → High Pass</div>
-        <div class="effect-desc">قطع كل حاجة تحت 100Hz في الـ Foley — مفيش Foley محتاج Sub Frequencies. ده بيخلّي المجال للـ Music والـ Voiceover يتنفسوا في الـ Low End.</div>
-        <div class="effect-tip">💡 Cutoff: 100Hz / اللي Foley ناعم زي ورق: 80Hz بيكفي</div>
+      <div class="form-group">
+        <label>كلمة المرور</label>
+        <input type="password" id="login-pass" class="input-full" placeholder="••••••••" required />
       </div>
-
-      <div class="effect-row">
-        <div class="effect-name">Studio Reverb — Room Match</div>
-        <div class="effect-path">Audio Effects → Reverb → Studio Reverb</div>
-        <div class="effect-desc">مهم جدًا — خلّي الـ Reverb يتناسب مع المكان اللي التصوير فيه. غرفة صغيرة: Room Size 15–20%, Decay 0.3s. مكان مفتوح: Room Size 40%, Decay 0.8s.</div>
-        <div class="effect-tip">💡 Foley من مكتبة بدون Reverb بيبدو "مصطنع" — لازم تضيف Room Match</div>
-      </div>
-
-      <div class="effect-row">
-        <div class="effect-name">Dynamics — Gentle Compression</div>
-        <div class="effect-path">Audio Effects → Amplitude and Compression → Dynamics</div>
-        <div class="effect-desc">Ratio 2:1 أو 3:1 مع Threshold -18dB — بيخلّي الـ Foley Consistent من غير ما تقتل الـ Natural Dynamics بتاعته. الكيبورد Typing مثلًا بيتفاوت — الـ Compression بيسوّيه.</div>
-        <div class="effect-tip">💡 Ratio: 2:1 / Threshold: -18dB / Attack: 20ms / Release: 100ms</div>
-      </div>
-
-    </div>
-
-    <div class="divider"></div>
-    <div class="sub-label">مستويات الصوت</div>
-    <div class="levels-block">
-      <div class="level-row">
-        <span class="level-label">Foley عادي</span>
-        <div class="level-bar-wrap"><div class="level-bar" style="width:38%;background:var(--foley);"></div></div>
-        <span class="level-val">-24 dB</span>
-      </div>
-      <div class="level-row">
-        <span class="level-label">Foley بارز</span>
-        <div class="level-bar-wrap"><div class="level-bar" style="width:52%;background:var(--foley);"></div></div>
-        <span class="level-val">-18 dB</span>
-      </div>
-      <div class="level-row">
-        <span class="level-label">مع Voiceover</span>
-        <div class="level-bar-wrap"><div class="level-bar" style="width:26%;background:#67e0f5;"></div></div>
-        <span class="level-val">-28 dB</span>
-      </div>
-      <div class="level-row">
-        <span class="level-label">مع Music</span>
-        <div class="level-bar-wrap"><div class="level-bar" style="width:20%;background:#67e0f5;"></div></div>
-        <span class="level-val">-30 dB</span>
-      </div>
-    </div>
-
-    <div class="sub-label" style="margin-top:18px">نصايح عملية</div>
-    <div class="tips-list">
-      <div class="tip-item"><div class="tip-dot"></div><span>الـ Foley دايمًا <strong>Subtle</strong> — المشاهد مش المفروض يسمعه، المفروض يحسّ بيه لو شاله</span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span>صوت الـ Keyboard Typing خلف الشاشة بيقول للمشاهد "في شغل بيتعمل" — بيضيف <strong>Trust</strong></span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span>في Educational Content — Foley بسيط (ورق، قلم) بيضيف <strong>Warmth وإنسانية</strong> على المحتوى</span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span>استخدم الـ <strong>Essential Sound Panel</strong> في Premiere وصنّف الـ Foley كـ "SFX" — هيطبّق Preset تلقائي كويس</span></div>
-    </div>
-
+      <div id="login-error"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:13px;">
+        دخول
+      </button>
+    </form>
   </div>
 </div>
 
-
-<!-- ═══════════ AMBIENCE ═══════════ -->
-<div class="section-card amb">
-  <div class="section-header">
-    <div class="section-icon">🌆</div>
-    <div class="section-title-wrap">
-      <h2>Ambience</h2>
-      <p>صوت المكان — الـ "هواء" اللي بيحيي المشهد</p>
+<!-- =================== DASHBOARD VIEW =================== -->
+<div id="view-dashboard" class="view">
+  <div class="dash-header">
+    <div>
+      <button id="dash-back-btn" class="btn btn-ghost" style="margin-bottom:12px">← الرئيسية</button>
+      <h2>⚙️ لوحة التحكم</h2>
     </div>
+    <button id="btn-new-post" class="btn btn-primary">➕ مقال جديد</button>
   </div>
-  <div class="section-body">
+  <div id="dash-posts-list"></div>
+</div>
 
-    <div class="def-box">
-      الـ Ambience هي الـ <strong>Layer اللي بتحدّد أنت فين</strong> في الـ Video. المكتبة، الشارع، الاستوديو، الطبيعة، الكافيه. من غيرها المشهد بيبقى "في فراغ" حتى لو الصورة واضحة. دي اللي بتبني الـ <em>Emotional Atmosphere</em> كلها تحت الـ Voiceover والـ Music.
+<!-- =================== EDITOR MODAL =================== -->
+<div id="editor-modal">
+  <div class="editor-card">
+    <div class="editor-header">
+      <h3 id="editor-title">مقال جديد</h3>
+      <button id="btn-close-editor" class="editor-close">✕</button>
     </div>
-
-    <div class="sub-label">أمثلة مفصّلة</div>
-    <div class="examples-grid">
-      <span class="tag">Coffee Shop Chatter</span>
-      <span class="tag">City Traffic</span>
-      <span class="tag">Office HVAC Hum</span>
-      <span class="tag">Rain on Window</span>
-      <span class="tag">Studio Silence (Room Tone)</span>
-      <span class="tag">Cairo Street Market</span>
-      <span class="tag">Nature — Birds + Wind</span>
-      <span class="tag">Lo-fi Room Tone</span>
-      <span class="tag">Library Quiet</span>
-      <span class="tag">Rooftop Wind</span>
-      <span class="tag">Night Crickets</span>
-      <span class="tag">Cafe Espresso Machine</span>
-    </div>
-
-    <div class="divider"></div>
-    <div class="sub-label">الإفيكتات في Premiere Pro</div>
-    <div class="effects-list">
-
-      <div class="effect-row">
-        <div class="effect-name">Low Pass Filter</div>
-        <div class="effect-path">Audio Effects → Filter and EQ → Low Pass</div>
-        <div class="effect-desc">قطع الـ High Frequencies (فوق 8kHz) علشان الـ Ambience تفضل "بعيدة وخلفية" في الـ Perception ومش بتنافس الـ Voiceover. Cutoff: 6–8kHz.</div>
-        <div class="effect-tip">💡 Cutoff: 7kHz — بيحس المشاهد إن المكان "بعيد" مش في وشه</div>
+    <form id="editor-form">
+      <div class="editor-grid">
+        <div class="span-2">
+          <div class="form-group">
+            <label>العنوان الرئيسي</label>
+            <input type="text" id="field-title" class="input-full" placeholder="عنوان المقال..." required />
+          </div>
+        </div>
+        <div class="span-2">
+          <div class="form-group">
+            <label>العنوان الفرعي</label>
+            <input type="text" id="field-subtitle" class="input-full" placeholder="وصف قصير للمقال..." />
+          </div>
+        </div>
+        <div>
+          <div class="form-group">
+            <label>التصنيف</label>
+            <input type="text" id="field-category" class="input-full" placeholder="مثال: برمجة، تقنية..." />
+          </div>
+        </div>
+        <div>
+          <div class="form-group">
+            <label>الأيقونة (Emoji)</label>
+            <input type="text" id="field-icon" class="input-full" placeholder="📄" />
+          </div>
+        </div>
+        <div>
+          <div class="form-group">
+            <label>الوسوم (مفصولة بفاصلة)</label>
+            <input type="text" id="field-tags" class="input-full" placeholder="JavaScript, React, API" />
+          </div>
+        </div>
+        <div>
+          <div class="form-group">
+            <label>وقت القراءة (دقائق)</label>
+            <input type="number" id="field-readtime" class="input-full" placeholder="5" min="1" />
+          </div>
+        </div>
+        <div class="span-2">
+          <div class="form-group">
+            <label>المحتوى (HTML مدعوم)</label>
+            <textarea id="field-content" class="input-full" placeholder="اكتب محتوى المقال هنا... يمكنك استخدام HTML مثل &lt;h2&gt;، &lt;p&gt;، &lt;code&gt;، &lt;ul&gt; ..."></textarea>
+          </div>
+        </div>
       </div>
-
-      <div class="effect-row">
-        <div class="effect-name">Volume Keyframes — Automation</div>
-        <div class="effect-path">Timeline → Show Clip Keyframes → Volume → Level</div>
-        <div class="effect-desc">في Premiere افتح الـ Keyframes على الـ Audio Track وارسم Automation — خفّض الـ Ambience لما يبدأ Voiceover وارفعها في الـ Silence. مش في Effect، في الـ Timeline نفسها.</div>
-        <div class="effect-tip">💡 اعمل Fade Down -6dB لما يبدأ الكلام — Fade Up لما يخلص</div>
+      <div class="editor-footer">
+        <label class="checkbox-row">
+          <input type="checkbox" id="field-published" />
+          <span>🚀 نشر فوراً</span>
+        </label>
+        <div class="editor-actions">
+          <button type="button" id="btn-preview-editor" class="btn btn-ghost">👁 معاينة</button>
+          <button type="submit" id="btn-save-post" class="btn btn-primary">💾 حفظ المقال</button>
+        </div>
       </div>
-
-      <div class="effect-row">
-        <div class="effect-name">Fill Right with Left (Stereo Widening)</div>
-        <div class="effect-path">Audio Effects → Special → Fill Left with Right / Fill Right with Left</div>
-        <div class="effect-desc">لو الـ Ambience Mono — استخدم الإفيكت ده عشان تعمله Pseudo-Stereo. بيضيف عرض واضح في الـ Stereo Field علشان الـ Ambience تحيط بالمشاهد من كل الجهات.</div>
-        <div class="effect-tip">💡 بعده حط Dynamics عشان تتحكم في الـ Level</div>
-      </div>
-
-      <div class="effect-row">
-        <div class="effect-name">Hard Limiter</div>
-        <div class="effect-path">Audio Effects → Amplitude and Compression → Hard Limiter</div>
-        <div class="effect-desc">Maximum Amplitude: -12dB للـ Ambience — يضمن إنها ما بتعلاش فجأة في أي لحظة في الـ Track. مهم لو الـ Ambience فيها peaks مختلفة (زي مرور عربية فجأة).</div>
-        <div class="effect-tip">💡 Input Boost: 0dB / Maximum Amplitude: -12dB</div>
-      </div>
-
-    </div>
-
-    <div class="divider"></div>
-    <div class="sub-label">مستويات الصوت</div>
-    <div class="levels-block">
-      <div class="level-row">
-        <span class="level-label">خلف Voiceover</span>
-        <div class="level-bar-wrap"><div class="level-bar" style="width:22%;background:var(--amb);"></div></div>
-        <span class="level-val">-30 dB</span>
-      </div>
-      <div class="level-row">
-        <span class="level-label">خلف Music</span>
-        <div class="level-bar-wrap"><div class="level-bar" style="width:30%;background:var(--amb);"></div></div>
-        <span class="level-val">-26 dB</span>
-      </div>
-      <div class="level-row">
-        <span class="level-label">مشهد بدون كلام</span>
-        <div class="level-bar-wrap"><div class="level-bar" style="width:48%;background:var(--amb);"></div></div>
-        <span class="level-val">-20 dB</span>
-      </div>
-      <div class="level-row">
-        <span class="level-label">وحدها (Ambience Scene)</span>
-        <div class="level-bar-wrap"><div class="level-bar" style="width:62%;background:#c4b0fd;"></div></div>
-        <span class="level-val">-14 dB</span>
-      </div>
-    </div>
-
-    <div class="sub-label" style="margin-top:18px">نصايح عملية</div>
-    <div class="tips-list">
-      <div class="tip-item"><div class="tip-dot"></div><span>الـ Ambience لازم تكون موجودة <strong>حتى لو ما تسمعهاش</strong> — غيابها بيحسّسك بالفراغ فورًا</span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span>في الـ Reels — Lo-fi Room Tone أو Coffee Shop Ambience خلف الـ Voiceover بتضيف <strong>دفا وراحة</strong></span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span><strong>غيّر الـ Ambience</strong> مع كل Scene Change — المشاهد بيحسّ بالانتقال حتى قبل ما يشوفه بالعين</span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span>الـ <strong>Room Tone</strong> (سكوت الاستوديو) مهم جدًا — سجّل 10 ثواني صمت في أي مكان بتصور فيه عشان تملا الـ Gaps</span></div>
-    </div>
-
+    </form>
   </div>
 </div>
 
-
-<!-- ═══════════ SITES ═══════════ -->
-<div class="section-card">
-  <div class="section-header">
-    <div class="section-icon" style="background:rgba(249,115,22,.1);font-size:20px;">🌐</div>
-    <div class="section-title-wrap">
-      <h2 style="color:#e8eaf0;">مواقع التحميل</h2>
-      <p>أفضل مصادر لـ SFX · Foley · Ambience</p>
-    </div>
-  </div>
-  <div class="section-body">
-
-    <div class="sub-label">مجانية 100%</div>
-    <div class="sites-grid">
-      <div class="site-row">
-        <span class="site-badge free">FREE</span>
-        <div class="site-info">
-          <div class="site-name">Pixabay — pixabay.com/sound-effects</div>
-          <div class="site-desc">مكتبة ضخمة من SFX وأصوات بيئة. مجانية تجاريًا. فلترة ممتازة بـ Category. الأكثر استخدامًا للمبتدئين.</div>
-        </div>
-      </div>
-      <div class="site-row">
-        <span class="site-badge free">FREE</span>
-        <div class="site-info">
-          <div class="site-name">Freesound — freesound.org</div>
-          <div class="site-desc">أضخم مكتبة Community-Based. فيها ملايين صوت مسجّل من ناس حول العالم. Foley وAmbience عالية الجودة. بعض الأصوات تحتاج Attribution.</div>
-        </div>
-      </div>
-      <div class="site-row">
-        <span class="site-badge free">FREE</span>
-        <div class="site-info">
-          <div class="site-name">ZapSplat — zapsplat.com</div>
-          <div class="site-desc">مكتبة منظمة بشكل ممتاز — SFX وFoley وAmbience كلها. Free Account: تحميل بـ watermark / Premium: بدون watermark ومحدودش.</div>
-        </div>
-      </div>
-      <div class="site-row">
-        <span class="site-badge free">FREE</span>
-        <div class="site-info">
-          <div class="site-name">BBC Sound Effects — sound-effects.bbcrewind.co.uk</div>
-          <div class="site-desc">مكتبة BBC الرسمية — 16,000+ صوت احترافي. Ambience من حول العالم. للاستخدام غير التجاري فقط. جودة استوديو حقيقية.</div>
-        </div>
-      </div>
-      <div class="site-row">
-        <span class="site-badge free">FREE</span>
-        <div class="site-info">
-          <div class="site-name">OpenGameArt — opengameart.org</div>
-          <div class="site-desc">مكتبة SFX مفتوحة المصدر. الأصوات الرقمية والـ Glitch والـ Sci-Fi فيها كتير ومتنوعة.</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="sub-label" style="margin-top:18px">مدفوعة / مختلطة (الأفضل جودة)</div>
-    <div class="sites-grid">
-      <div class="site-row">
-        <span class="site-badge mixed">MIXED</span>
-        <div class="site-info">
-          <div class="site-name">Epidemic Sound — epidemicsound.com</div>
-          <div class="site-desc">الأفضل للكريتورز — اشتراك شهري يشمل Music + SFX + Ambience. License تجاري شامل. فلترة بـ Mood وCategory. الأكثر استخدامًا من الكريتورز المحترفين.</div>
-        </div>
-      </div>
-      <div class="site-row">
-        <span class="site-badge mixed">MIXED</span>
-        <div class="site-info">
-          <div class="site-name">Artlist — artlist.io</div>
-          <div class="site-desc">Music + SFX بـ License سنوي. SFX Pack منفصل (~$9/شهر). الجودة أعلى من Epidemic. License يشمل كل المنصات بدون قيود.</div>
-        </div>
-      </div>
-      <div class="site-row">
-        <span class="site-badge paid">PAID</span>
-        <div class="site-info">
-          <div class="site-name">SoundSnap — soundsnap.com</div>
-          <div class="site-desc">مكتبة SFX احترافية بحتة. أصوات Cinematic وFoley بجودة Hollywood. Credits System — تدفع على حسب الاستخدام.</div>
-        </div>
-      </div>
-      <div class="site-row">
-        <span class="site-badge paid">PAID</span>
-        <div class="site-info">
-          <div class="site-name">Pond5 — pond5.com</div>
-          <div class="site-desc">Market ضخم — SFX وFoley وAmbience بالقطعة. بعض الأصوات من $1. الأفضل لو محتاج صوت محدد جدًا مش لاقيه في مكان تاني.</div>
-        </div>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-
-<!-- ═══════════ FOLDERS ═══════════ -->
-<div class="section-card org">
-  <div class="section-header">
-    <div class="section-icon">📁</div>
-    <div class="section-title-wrap">
-      <h2>تنظيم الفولدرز</h2>
-      <p>System احترافي لتخزين الـ Sound Library</p>
-    </div>
-  </div>
-  <div class="section-body">
-
-    <div class="def-box">
-      تنظيم الـ Sound Library صح بيوفّر عليك وقت ومجهود كبير في كل مشروع. الهدف إنك <strong>توصل لأي صوت في 10 ثواني</strong> — مش تدور في ملفات مبعثرة.
-    </div>
-
-    <div class="sub-label">هيكل الفولدرز المقترح</div>
-    <div class="folder-tree">
-<span class="f-root">📁 Sound Library</span>
-<br>
-<span class="f-l1">├── 📁 01_SFX</span>
-<br>
-<span class="f-l2">│   ├── 📁 Whoosh</span>
-<br>
-<span class="f-l3">│   │   ├── whoosh_heavy_01.wav</span>
-<br>
-<span class="f-l3">│   │   └── whoosh_soft_02.wav</span>
-<br>
-<span class="f-l2">│   ├── 📁 Hits &amp; Impacts</span>
-<br>
-<span class="f-l3">│   │   ├── impact_cinematic_01.wav</span>
-<br>
-<span class="f-l3">│   │   └── hit_punch_03.wav</span>
-<br>
-<span class="f-l2">│   ├── 📁 Risers &amp; Drops</span>
-<br>
-<span class="f-l2">│   ├── 📁 Transitions</span>
-<br>
-<span class="f-l2">│   ├── 📁 Glitch &amp; Digital</span>
-<br>
-<span class="f-l2">│   └── 📁 Misc SFX</span>
-<br>
-<br>
-<span class="f-l1">├── 📁 02_Foley</span>
-<br>
-<span class="f-l2">│   ├── 📁 Keyboard &amp; Mouse</span>
-<br>
-<span class="f-l2">│   ├── 📁 Footsteps</span>
-<br>
-<span class="f-l3">│   │   ├── footsteps_wood_01.wav</span>
-<br>
-<span class="f-l3">│   │   └── footsteps_concrete_02.wav</span>
-<br>
-<span class="f-l2">│   ├── 📁 Doors &amp; Objects</span>
-<br>
-<span class="f-l2">│   └── 📁 Paper &amp; Writing</span>
-<br>
-<br>
-<span class="f-l1">├── 📁 03_Ambience</span>
-<br>
-<span class="f-l2">│   ├── 📁 Indoor</span>
-<br>
-<span class="f-l3">│   │   ├── cafe_morning_01.wav</span>
-<br>
-<span class="f-l3">│   │   └── office_hum_02.wav</span>
-<br>
-<span class="f-l2">│   ├── 📁 Outdoor</span>
-<br>
-<span class="f-l3">│   │   ├── street_cairo_01.wav</span>
-<br>
-<span class="f-l3">│   │   └── rain_window_03.wav</span>
-<br>
-<span class="f-l2">│   ├── 📁 Nature</span>
-<br>
-<span class="f-l2">│   └── 📁 Lo-fi &amp; Room Tone</span>
-<br>
-<br>
-<span class="f-l1">├── 📁 04_Music</span>
-<br>
-<span class="f-l2">│   ├── 📁 Upbeat</span>
-<br>
-<span class="f-l2">│   ├── 📁 Emotional</span>
-<br>
-<span class="f-l2">│   ├── 📁 Lo-fi</span>
-<br>
-<span class="f-l2">│   └── 📁 No Copyright</span>
-<br>
-<br>
-<span class="f-l1">└── 📁 05_Favorites</span>
-<br>
-<span class="f-l2">    ├── 📁 Reels Pack</span>
-<br>
-<span class="f-l2">    └── 📁 Go-To Sounds</span>
-<br>
-<span class="f-note">    <em>← الأصوات اللي بتستخدمها كتير — اعمل Shortcut ليها</em></span>
-    </div>
-
-    <div class="sub-label" style="margin-top:20px">قواعد التسمية</div>
-    <div class="tips-list">
-      <div class="tip-item"><div class="tip-dot"></div><span><strong>اسم الصوت + وصف + رقم</strong> — مثال: <code>whoosh_heavy_01.wav</code> / <code>impact_cinematic_02.wav</code></span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span>ما تستخدمش مسافات في الاسم — استخدم <strong>underscore _</strong> دايمًا</span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span>خزّن بـ <strong>.WAV</strong> مش MP3 — جودة أعلى وما فيهاش Compression يأثر على الـ Mix</span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span>فولدر <strong>05_Favorites / Reels Pack</strong> — حط فيه الأصوات اللي بتستخدمها في كل Reel تقريبًا عشان توصالها بسرعة</span></div>
-      <div class="tip-item"><div class="tip-dot"></div><span>في Premiere — اعمل <strong>Custom Bin</strong> بنفس الهيكل ده في الـ Project Panel عشان توصل للصوت من جوه البرنامج مباشرة</span></div>
-    </div>
-
-  </div>
-</div>
-
-
-<!-- ═══════════ COMPARISON ═══════════ -->
-<div class="section-card">
-  <div class="section-header">
-    <div class="section-icon" style="background:#1a2235;font-size:18px;">📊</div>
-    <div class="section-title-wrap">
-      <h2 style="color:#e8eaf0;">مقارنة سريعة</h2>
-      <p>الفرق بين الأنواع الثلاثة في ثوانٍ</p>
-    </div>
-  </div>
-  <div class="section-body" style="padding:0;">
-    <table class="comp-table">
-      <thead>
-        <tr>
-          <th>النوع</th>
-          <th>الوظيفة</th>
-          <th>المستوى</th>
-          <th>الحضور</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td class="type-cell t-sfx">⚡ SFX</td>
-          <td>يضخّم الحدث البصري</td>
-          <td>-6 إلى -18 dB</td>
-          <td>مسموع ومقصود</td>
-        </tr>
-        <tr>
-          <td class="type-cell t-foley">🎹 Foley</td>
-          <td>يضيف واقعية وحياة</td>
-          <td>-18 إلى -30 dB</td>
-          <td>محسوس مش مسموع</td>
-        </tr>
-        <tr>
-          <td class="type-cell t-amb">🌆 Ambience</td>
-          <td>يبني الـ Atmosphere</td>
-          <td>-20 إلى -30 dB</td>
-          <td>في الخلفية دايمًا</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<div class="footer">
-  by <span>Reelmaster</span> · كل فريم فن ✦
-</div>
+<!-- =================== FOOTER =================== -->
+<footer>
+  <p>© 2024 منصة التعلم · صُنع بـ ❤️ للمحتوى التعليمي العربي</p>
+</footer>
 
 </body>
 </html>
