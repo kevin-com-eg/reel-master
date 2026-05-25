@@ -14,9 +14,12 @@
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
     import {
       getFirestore, collection, addDoc, getDocs, doc,
-      updateDoc, deleteDoc, serverTimestamp, increment, getDoc
+      updateDoc, deleteDoc, serverTimestamp, increment
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+    /* ═══════════════════════════════════════════════════════════
+       CONFIG
+    ═══════════════════════════════════════════════════════════ */
     const firebaseConfig = {
       apiKey: "AIzaSyBDjbkPEBmDv49NmCESLNdU3hyM1rOui9M",
       authDomain: "reelmaster-e03b2.firebaseapp.com",
@@ -26,106 +29,159 @@
       appId: "1:892892909343:web:a6db3c3c075678b7e3aa2a"
     };
 
-    const ADMIN_EMAIL = "kevin.hany.08@hotmail.com";
-    const THEME_KEY = "reelmaster-theme";
-    const NOTIF_KEY = "reelmaster-seen-posts";
+    const ADMIN_EMAIL  = "kevin.hany.08@hotmail.com";
+    const THEME_KEY    = "reelmaster-theme";
+    const NOTIF_KEY    = "reelmaster-seen-posts";
+    const SITE_URL     = "https://reel-master-ten.vercel.app";
+    const WA_NUMBER    = "+201552271788";
 
-    const app = initializeApp(firebaseConfig);
+    const app  = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    const db = getFirestore(app);
+    const db   = getFirestore(app);
 
-    let currentUser = null;
-    let isAdmin = false;
-    let allPosts = [];
+    let currentUser   = null;
+    let isAdmin       = false;
+    let allPosts      = [];          // all loaded posts (published)
+    let allPostsAdmin = [];          // all posts including drafts
     let editingPostId = null;
-    let currentView = "home";
-    let attachments = []; // [{name, url, type}]
+    let attachments   = [];
 
-    // ─── HELPERS ────────────────────────────────────────────
+    /* ═══════════════════════════════════════════════════════════
+       SVG ICONS
+    ═══════════════════════════════════════════════════════════ */
+    const I = {
+      sun:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>`,
+      moon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`,
+      eye:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`,
+      clock:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+      cal:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+      edit:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+      trash:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
+      lock:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
+      rocket:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>`,
+      dl:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+      yt:`<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>`,
+      bell:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
+      share:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`,
+      copy:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+      check:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+      file:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+      plus:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+      settings:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+      logout:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+      refresh:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.25"/></svg>`,
+      img:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
+      x:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+      save:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>`,
+      back:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`,
+    };
+
+    /* ═══════════════════════════════════════════════════════════
+       THEME
+    ═══════════════════════════════════════════════════════════ */
+    function getSavedTheme() { return localStorage.getItem(THEME_KEY) || "dark"; }
+    function applyTheme(t) {
+      document.documentElement.setAttribute("data-theme", t);
+      localStorage.setItem(THEME_KEY, t);
+      const btn = document.getElementById("theme-toggle");
+      if (btn) btn.innerHTML = t === "light" ? `${I.moon} الوضع الداكن` : `${I.sun} الوضع الفاتح`;
+    }
+    function toggleTheme() {
+      applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light");
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       HELPERS
+    ═══════════════════════════════════════════════════════════ */
     function getSeenPosts() {
       try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || "[]"); } catch { return []; }
     }
     function markPostSeen(id) {
-      const seen = getSeenPosts();
-      if (!seen.includes(id)) { seen.push(id); localStorage.setItem(NOTIF_KEY, JSON.stringify(seen)); }
+      const s = getSeenPosts();
+      if (!s.includes(id)) { s.push(id); localStorage.setItem(NOTIF_KEY, JSON.stringify(s)); }
     }
-    function getUnseenCount(posts) {
+    function markAllSeen(posts) {
+      const ids = posts.filter(p => p.published).map(p => p.id);
+      localStorage.setItem(NOTIF_KEY, JSON.stringify(ids));
+    }
+    function countUnseen(posts) {
       const seen = getSeenPosts();
       return posts.filter(p => p.published && !seen.includes(p.id)).length;
     }
 
-    function extractYouTubeId(url) {
+    function extractYTId(url) {
       if (!url) return null;
       const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/);
       return m ? m[1] : null;
     }
-
-    function formatDate(ts) {
+    function fmtDate(ts) {
       if (!ts?.toDate) return "";
-      return ts.toDate().toLocaleDateString("ar-EG", { year: "numeric", month: "long", day: "numeric" });
+      return ts.toDate().toLocaleDateString("ar-EG", { year:"numeric", month:"long", day:"numeric" });
     }
-
-    function formatViews(n) {
+    function fmtViews(n) {
       if (!n) return "0";
-      if (n >= 1000) return (n / 1000).toFixed(1) + "k";
-      return String(n);
+      return n >= 1000 ? (n/1000).toFixed(1)+"k" : String(n);
+    }
+    function postShareUrl(id) { return `${SITE_URL}/?postid=${id}`; }
+
+    /* ═══════════════════════════════════════════════════════════
+       NOTIFICATION BADGE  (fixed: reads live allPosts)
+    ═══════════════════════════════════════════════════════════ */
+    function refreshBadge() {
+      const badge = document.getElementById("notif-badge");
+      const btn   = document.getElementById("notif-btn");
+      if (!badge || !btn) return;
+      const n = countUnseen(allPosts);
+      if (n > 0) {
+        badge.textContent = n > 9 ? "9+" : n;
+        badge.style.display = "flex";
+        btn.classList.add("has-notif");
+      } else {
+        badge.style.display = "none";
+        btn.classList.remove("has-notif");
+      }
     }
 
-    // ─── THEME ──────────────────────────────────────────────
-    function getSavedTheme() { return localStorage.getItem(THEME_KEY) || "dark"; }
-    function applyTheme(theme) {
-      document.documentElement.setAttribute("data-theme", theme);
-      localStorage.setItem(THEME_KEY, theme);
-      const btn = document.getElementById("theme-toggle");
-      if (!btn) return;
-      btn.innerHTML = theme === "light"
-        ? `${iconSvg("moon")} الوضع الداكن`
-        : `${iconSvg("sun")} الوضع الفاتح`;
-    }
-    function toggleTheme() {
-      const cur = document.documentElement.getAttribute("data-theme") || "dark";
-      applyTheme(cur === "light" ? "dark" : "light");
+    /* ═══════════════════════════════════════════════════════════
+       TOAST
+    ═══════════════════════════════════════════════════════════ */
+    function toast(msg, icon = I.check) {
+      const t = document.createElement("div");
+      t.className = "rm-toast";
+      t.innerHTML = `<span class="toast-icon">${icon}</span><span>${msg}</span>`;
+      document.body.appendChild(t);
+      requestAnimationFrame(() => t.classList.add("show"));
+      setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 350); }, 2500);
     }
 
-    // ─── SVG ICONS ──────────────────────────────────────────
-    function iconSvg(name, cls = "") {
-      const icons = {
-        sun: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>`,
-        moon: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`,
-        eye: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`,
-        clock: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-        calendar: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
-        edit: `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
-        trash: `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
-        lock: `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
-        rocket: `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>`,
-        download: `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
-        youtube: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="${cls}"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>`,
-        bell: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
-        back: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><path d="m9 18 6-6-6-6"/></svg>`,
-        file: `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
-        plus: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
-        settings: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
-        logout: `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
-        refresh: `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.25"/></svg>`,
-        x: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="${cls}"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
-      };
-      return icons[name] || "";
+    /* ═══════════════════════════════════════════════════════════
+       DEEP-LINK: read ?postid= on load
+    ═══════════════════════════════════════════════════════════ */
+    function getUrlPostId() {
+      return new URLSearchParams(window.location.search).get("postid");
+    }
+    function setUrlPostId(id) {
+      const u = new URL(window.location.href);
+      if (id) u.searchParams.set("postid", id); else u.searchParams.delete("postid");
+      history.replaceState(null, "", u.toString());
     }
 
-    // ─── VIEWS ──────────────────────────────────────────────
+    /* ═══════════════════════════════════════════════════════════
+       VIEWS
+    ═══════════════════════════════════════════════════════════ */
     function showView(view, data = null) {
-      currentView = view;
       document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
       const el = document.getElementById("view-" + view);
       if (el) el.classList.add("active");
       window.scrollTo({ top: 0, behavior: "smooth" });
-      if (view === "home") renderHome();
-      if (view === "post") renderPost(data);
-      if (view === "dashboard") renderDashboard();
+      if (view === "home")      { setUrlPostId(null); renderHome(); }
+      if (view === "post")      { setUrlPostId(data?.id || null); renderPost(data); }
+      if (view === "dashboard") { setUrlPostId(null); renderDashboard(); }
     }
 
-    // ─── AUTH ───────────────────────────────────────────────
+    /* ═══════════════════════════════════════════════════════════
+       AUTH
+    ═══════════════════════════════════════════════════════════ */
     onAuthStateChanged(auth, user => {
       currentUser = user;
       isAdmin = !!(user && user.email === ADMIN_EMAIL);
@@ -138,19 +194,17 @@
       if (currentUser) {
         const av = currentUser.displayName ? currentUser.displayName.charAt(0).toUpperCase() : "؟";
         right.innerHTML = `
-          ${isAdmin ? `<button class="btn btn-ghost btn-sm icon-btn" onclick="window._go('dashboard')" title="لوحة التحكم">${iconSvg("settings")} <span>لوحة التحكم</span></button>` : ""}
+          ${isAdmin ? `<button class="btn btn-ghost btn-sm icon-btn" onclick="window._go('dashboard')">${I.settings}<span>لوحة التحكم</span></button>` : ""}
           <div class="nav-user">
             <div class="avatar">${av}</div>
             <span class="nav-username">${currentUser.displayName || "مستخدم"}</span>
           </div>
-          <button class="btn btn-ghost btn-sm icon-btn" id="btn-logout" title="خروج">${iconSvg("logout")} <span>خروج</span></button>
-        `;
-        document.getElementById("btn-logout")?.addEventListener("click", handleLogout);
+          <button class="btn btn-ghost btn-sm icon-btn" id="btn-logout">${I.logout}<span>خروج</span></button>`;
+        document.getElementById("btn-logout")?.addEventListener("click", () => signOut(auth).then(() => showView("home")));
       } else {
         right.innerHTML = `
           <button class="btn btn-ghost btn-sm" onclick="window._showAuthModal('login')">دخول</button>
-          <button class="btn btn-primary btn-sm" onclick="window._showAuthModal('register')">إنشاء حساب</button>
-        `;
+          <button class="btn btn-primary btn-sm" onclick="window._showAuthModal('register')">إنشاء حساب</button>`;
       }
     }
 
@@ -159,17 +213,13 @@
       switchAuthTab(tab);
     };
 
-    function clearAuthErrors() {
+    function switchAuthTab(tab) {
+      document.getElementById("auth-tab-login").classList.toggle("active-tab", tab==="login");
+      document.getElementById("auth-tab-register").classList.toggle("active-tab", tab==="register");
+      document.getElementById("auth-panel-login").style.display   = tab==="login"    ? "block" : "none";
+      document.getElementById("auth-panel-register").style.display = tab==="register" ? "block" : "none";
       document.getElementById("login-error").textContent = "";
       document.getElementById("register-error").textContent = "";
-    }
-
-    function switchAuthTab(tab) {
-      document.getElementById("auth-tab-login").classList.toggle("active-tab", tab === "login");
-      document.getElementById("auth-tab-register").classList.toggle("active-tab", tab === "register");
-      document.getElementById("auth-panel-login").style.display = tab === "login" ? "block" : "none";
-      document.getElementById("auth-panel-register").style.display = tab === "register" ? "block" : "none";
-      clearAuthErrors();
     }
 
     function closeAuthModal() {
@@ -177,119 +227,84 @@
       ["login-email","login-pass","reg-name","reg-email","reg-pass"].forEach(id => {
         const el = document.getElementById(id); if (el) el.value = "";
       });
-      clearAuthErrors();
     }
 
-    async function handleLogin(e) {
-      e.preventDefault();
-      const email = document.getElementById("login-email").value.trim();
-      const pass = document.getElementById("login-pass").value;
-      const err = document.getElementById("login-error");
-      err.textContent = "";
-      try {
-        await signInWithEmailAndPassword(auth, email, pass);
-        closeAuthModal();
-        if (email === ADMIN_EMAIL) showView("dashboard");
-      } catch {
-        err.textContent = "بيانات خاطئة، تحقق من الإيميل وكلمة المرور.";
-      }
-    }
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("login-form")?.addEventListener("submit", async e => {
+        e.preventDefault();
+        const email = document.getElementById("login-email").value.trim();
+        const pass  = document.getElementById("login-pass").value;
+        const err   = document.getElementById("login-error");
+        err.textContent = "";
+        try {
+          await signInWithEmailAndPassword(auth, email, pass);
+          closeAuthModal();
+          if (email === ADMIN_EMAIL) showView("dashboard");
+        } catch { err.textContent = "بيانات خاطئة — تحقق من الإيميل وكلمة المرور."; }
+      });
 
-    async function handleRegister(e) {
-      e.preventDefault();
-      const name = document.getElementById("reg-name").value.trim();
-      const email = document.getElementById("reg-email").value.trim();
-      const pass = document.getElementById("reg-pass").value;
-      const err = document.getElementById("register-error");
-      err.textContent = "";
-      if (!name) { err.textContent = "من فضلك اكتب اسمك."; return; }
-      try {
-        const cred = await createUserWithEmailAndPassword(auth, email, pass);
-        await updateProfile(cred.user, { displayName: name });
-        currentUser = cred.user;
-        renderNavbar();
-        closeAuthModal();
-      } catch (ex) {
-        if (ex.code === "auth/email-already-in-use") err.textContent = "الإيميل ده مستخدم بالفعل.";
-        else if (ex.code === "auth/weak-password") err.textContent = "كلمة المرور أقل من 6 أحرف.";
-        else err.textContent = ex.code || "حدث خطأ، حاول مرة أخرى.";
-      }
-    }
+      document.getElementById("register-form")?.addEventListener("submit", async e => {
+        e.preventDefault();
+        const name  = document.getElementById("reg-name").value.trim();
+        const email = document.getElementById("reg-email").value.trim();
+        const pass  = document.getElementById("reg-pass").value;
+        const err   = document.getElementById("register-error");
+        err.textContent = "";
+        if (!name) { err.textContent = "من فضلك اكتب اسمك."; return; }
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, email, pass);
+          await updateProfile(cred.user, { displayName: name });
+          currentUser = cred.user; renderNavbar(); closeAuthModal();
+        } catch (ex) {
+          if (ex.code === "auth/email-already-in-use") err.textContent = "الإيميل ده مستخدم بالفعل.";
+          else if (ex.code === "auth/weak-password") err.textContent = "كلمة المرور أقل من 6 أحرف.";
+          else err.textContent = ex.code || "حدث خطأ، حاول مرة أخرى.";
+        }
+      });
+    });
 
-    async function handleLogout() {
-      await signOut(auth);
-      showView("home");
-    }
-
-    // ─── FIRESTORE ──────────────────────────────────────────
-    async function loadPosts(all = false) {
+    /* ═══════════════════════════════════════════════════════════
+       FIRESTORE
+    ═══════════════════════════════════════════════════════════ */
+    async function loadPosts(includeAll = false) {
       try {
         const snap = await getDocs(collection(db, "posts"));
         let posts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        if (!all) posts = posts.filter(p => p.published === true || String(p.published).toLowerCase() === "true");
-        posts.sort((a, b) => {
-          const da = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-          const db2 = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-          return db2 - da;
-        });
-        allPosts = posts;
+        if (!includeAll) posts = posts.filter(p => p.published === true || String(p.published).toLowerCase() === "true");
+        posts.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
         return posts;
-      } catch (ex) {
-        console.error("loadPosts error:", ex);
-        return [];
-      }
+      } catch (ex) { console.error(ex); return []; }
     }
 
-    async function savePost(data, id = null) {
-      if (id) {
-        await updateDoc(doc(db, "posts", id), { ...data, updatedAt: serverTimestamp() });
-      } else {
-        await addDoc(collection(db, "posts"), { ...data, createdAt: serverTimestamp(), views: 0 });
-      }
+    async function savePost(data, id) {
+      if (id) await updateDoc(doc(db,"posts",id), { ...data, updatedAt: serverTimestamp() });
+      else     await addDoc(collection(db,"posts"), { ...data, createdAt: serverTimestamp(), views: 0 });
     }
 
-    async function deletePost(id) { await deleteDoc(doc(db, "posts", id)); }
+    async function deletePost(id)           { await deleteDoc(doc(db,"posts",id)); }
+    async function togglePublish(id, cur)   { await updateDoc(doc(db,"posts",id), { published: !cur }); }
+    async function bumpViews(id)            { try { await updateDoc(doc(db,"posts",id), { views: increment(1) }); } catch {} }
 
-    async function togglePublish(id, cur) { await updateDoc(doc(db, "posts", id), { published: !cur }); }
-
-    async function incrementViews(id) {
-      try { await updateDoc(doc(db, "posts", id), { views: increment(1) }); } catch {}
-    }
-
-    // ─── NOTIFICATION BADGE ─────────────────────────────────
-    function updateNotifBadge(posts) {
-      const count = getUnseenCount(posts);
-      const badge = document.getElementById("notif-badge");
-      const btn = document.getElementById("notif-btn");
-      if (!badge || !btn) return;
-      if (count > 0) {
-        badge.textContent = count > 9 ? "9+" : count;
-        badge.style.display = "flex";
-        btn.classList.add("has-notif");
-      } else {
-        badge.style.display = "none";
-        btn.classList.remove("has-notif");
-      }
-    }
-
-    // ─── HOME ───────────────────────────────────────────────
+    /* ═══════════════════════════════════════════════════════════
+       HOME
+    ═══════════════════════════════════════════════════════════ */
     async function renderHome() {
-      const grid = document.getElementById("posts-grid");
+      const grid   = document.getElementById("posts-grid");
       const loader = document.getElementById("posts-loader");
       if (!grid) return;
       grid.innerHTML = "";
       loader.style.display = "flex";
-      const posts = await loadPosts(false);
+      allPosts = await loadPosts(false);
       loader.style.display = "none";
-      updateNotifBadge(posts);
+      refreshBadge();
 
-      if (!posts.length) {
+      if (!allPosts.length) {
         grid.innerHTML = `<div class="empty-state"><div class="empty-logo">RM</div><p>لا توجد مقالات منشورة بعد</p></div>`;
         return;
       }
 
       const grouped = {};
-      posts.forEach(p => {
+      allPosts.forEach(p => {
         const c = p.category || "عام";
         if (!grouped[c]) grouped[c] = [];
         grouped[c].push(p);
@@ -308,138 +323,170 @@
     }
 
     function buildCard(post) {
-      const card = document.createElement("div");
+      const card   = document.createElement("div");
       card.className = "post-card";
-      const isNew = !getSeenPosts().includes(post.id);
-      const tags = (post.tags || []).slice(0, 3).map(t => `<span class="tag">${t}</span>`).join("");
-      const hasYT = !!extractYouTubeId(post.youtubeUrl);
-      const hasDl = !!(post.attachments && post.attachments.length);
+      const isNew  = !getSeenPosts().includes(post.id);
+      const tags   = (post.tags||[]).slice(0,3).map(t=>`<span class="tag">${t}</span>`).join("");
+      const hasYT  = !!extractYTId(post.youtubeUrl);
+      const hasDl  = !!(post.attachments?.length);
+      const cover  = post.coverImage || "";
 
       card.innerHTML = `
-        <div class="card-header">
-          <div class="card-header-left">
-            <span class="card-category">${post.category || "عام"}</span>
-            ${isNew ? '<span class="new-badge">جديد</span>' : ""}
+        ${cover ? `<div class="card-cover"><img src="${cover}" alt="" loading="lazy"/></div>` : ""}
+        <div class="card-body">
+          <div class="card-header">
+            <div class="card-header-left">
+              <span class="card-category">${post.category||"عام"}</span>
+              ${isNew ? `<span class="new-badge">جديد</span>` : ""}
+            </div>
+            <div class="card-media-icons">
+              ${hasYT ? `<span class="media-icon yt-icon">${I.yt}</span>` : ""}
+              ${hasDl ? `<span class="media-icon dl-icon">${I.dl}</span>` : ""}
+            </div>
           </div>
-          <div class="card-media-icons">
-            ${hasYT ? `<span class="media-icon yt-icon" title="يحتوي على فيديو">${iconSvg("youtube")}</span>` : ""}
-            ${hasDl ? `<span class="media-icon dl-icon" title="يحتوي على ملفات للتنزيل">${iconSvg("download")}</span>` : ""}
+          <h3 class="card-title">${post.title||"بدون عنوان"}</h3>
+          <p class="card-subtitle">${post.subtitle||""}</p>
+          <div class="card-meta">
+            <span class="meta-item">${I.clock} ${post.readTime||"5"} دقائق</span>
+            <span class="meta-item">${I.eye} ${fmtViews(post.views||0)}</span>
+            ${post.createdAt?`<span class="meta-item">${I.cal} ${fmtDate(post.createdAt)}</span>`:""}
           </div>
-        </div>
-        <h3 class="card-title">${post.title || "بدون عنوان"}</h3>
-        <p class="card-subtitle">${post.subtitle || ""}</p>
-        <div class="card-meta">
-          <span class="meta-item">${iconSvg("clock")} ${post.readTime || "5"} دقائق</span>
-          <span class="meta-item">${iconSvg("eye")} ${formatViews(post.views || 0)}</span>
-          ${post.createdAt ? `<span class="meta-item">${iconSvg("calendar")} ${formatDate(post.createdAt)}</span>` : ""}
-        </div>
-        <div class="card-footer">
-          <div class="tags-row">${tags}</div>
+          <div class="card-footer">
+            <div class="tags-row">${tags}</div>
+          </div>
         </div>`;
+
       card.addEventListener("click", () => {
         markPostSeen(post.id);
-        incrementViews(post.id);
-        showView("post", { ...post, views: (post.views || 0) + 1 });
-        updateNotifBadge(allPosts);
+        bumpViews(post.id);
+        // optimistic views increment in memory
+        post.views = (post.views||0)+1;
+        refreshBadge();
+        showView("post", post);
       });
       return card;
     }
 
-    // ─── POST VIEW ──────────────────────────────────────────
+    /* ═══════════════════════════════════════════════════════════
+       POST VIEW
+    ═══════════════════════════════════════════════════════════ */
     function renderPost(post) {
       const c = document.getElementById("post-content");
       if (!c || !post) return;
-      const tags = (post.tags || []).map(t => `<span class="tag">${t}</span>`).join("");
-      const ytId = extractYouTubeId(post.youtubeUrl);
-      const atts = post.attachments || [];
-      const createdDate = formatDate(post.createdAt);
-      const updatedDate = post.updatedAt ? formatDate(post.updatedAt) : null;
 
-      let ytHtml = "";
-      if (ytId) {
-        ytHtml = `
-          <div class="yt-player-wrap">
-            <div class="yt-player-label">${iconSvg("youtube","yt-label-icon")} شرح فيديو</div>
-            <div class="yt-embed-container">
-              <iframe src="https://www.youtube.com/embed/${ytId}" title="YouTube video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-            </div>
-          </div>`;
-      }
+      const tags        = (post.tags||[]).map(t=>`<span class="tag">${t}</span>`).join("");
+      const ytId        = extractYTId(post.youtubeUrl);
+      const atts        = post.attachments||[];
+      const createdDate = fmtDate(post.createdAt);
+      const updatedDate = post.updatedAt ? fmtDate(post.updatedAt) : null;
+      const shareUrl    = postShareUrl(post.id);
 
-      let attHtml = "";
-      if (atts.length) {
-        const items = atts.map(a => `
-          <a class="att-item" href="${a.url}" target="_blank" download>
-            ${iconSvg("file","att-icon")}
-            <span class="att-name">${a.name}</span>
-            ${iconSvg("download","att-dl-icon")}
-          </a>`).join("");
-        attHtml = `<div class="attachments-wrap"><div class="att-title">${iconSvg("download","att-title-icon")} ملفات للتنزيل</div><div class="att-list">${items}</div></div>`;
-      }
+      const ytHtml = ytId ? `
+        <div class="yt-player-wrap">
+          <div class="yt-player-label">${I.yt} <span>شرح فيديو</span></div>
+          <div class="yt-embed-container">
+            <iframe src="https://www.youtube.com/embed/${ytId}"
+              title="YouTube video" frameborder="0"
+              allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture"
+              allowfullscreen></iframe>
+          </div>
+        </div>` : "";
+
+      const attHtml = atts.length ? `
+        <div class="attachments-wrap">
+          <div class="att-title">${I.dl} ملفات للتنزيل</div>
+          <div class="att-list">
+            ${atts.map(a=>`
+              <a class="att-item" href="${a.url}" target="_blank" rel="noopener">
+                ${I.file}<span class="att-name">${a.name}</span>${I.dl}
+              </a>`).join("")}
+          </div>
+        </div>` : "";
+
+      const coverHtml = post.coverImage ? `<div class="post-cover"><img src="${post.coverImage}" alt=""/></div>` : "";
 
       c.innerHTML = `
+        ${coverHtml}
         <div class="post-header-meta">
           <span class="brand-mark brand-mark-sm">RM</span>
-          <span class="post-cat-badge">${post.category || "عام"}</span>
+          <span class="post-cat-badge">${post.category||"عام"}</span>
         </div>
-        <h1 class="post-title gradient-text">${post.title || ""}</h1>
-        <p class="post-subtitle-text">${post.subtitle || ""}</p>
+        <h1 class="post-title gradient-text">${post.title||""}</h1>
+        <p class="post-subtitle-text">${post.subtitle||""}</p>
         <div class="post-meta-row">
-          ${createdDate ? `<span class="pmeta-item">${iconSvg("calendar")} نُشر ${createdDate}</span>` : ""}
-          ${updatedDate ? `<span class="pmeta-item">${iconSvg("refresh")} عُدّل ${updatedDate}</span>` : ""}
-          <span class="pmeta-item">${iconSvg("clock")} ${post.readTime || "5"} دقائق قراءة</span>
-          <span class="pmeta-item">${iconSvg("eye")} ${formatViews(post.views || 0)} مشاهدة</span>
+          ${createdDate?`<span class="pmeta-item">${I.cal} نُشر ${createdDate}</span>`:""}
+          ${updatedDate?`<span class="pmeta-item">${I.refresh} عُدّل ${updatedDate}</span>`:""}
+          <span class="pmeta-item">${I.clock} ${post.readTime||"5"} دقائق</span>
+          <span class="pmeta-item">${I.eye} ${fmtViews(post.views||0)} مشاهدة</span>
+        </div>
+        <div class="post-share-bar">
+          <button class="share-copy-btn" id="btn-share-copy" data-url="${shareUrl}">
+            ${I.copy} نسخ رابط المنشور
+          </button>
+          <a class="share-wa-btn" href="https://api.whatsapp.com/send?text=${encodeURIComponent('اقرأ المنشور ده: '+shareUrl)}" target="_blank" rel="noopener">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>
+            مشاركة واتساب
+          </a>
         </div>
         <div class="tags-row post-tags">${tags}</div>
         <hr class="post-divider"/>
         ${ytHtml}
-        <div class="post-body">${post.content || ""}</div>
-        ${attHtml}
-      `;
+        <div class="post-body">${post.content||""}</div>
+        ${attHtml}`;
+
+      // copy button
+      document.getElementById("btn-share-copy")?.addEventListener("click", function() {
+        navigator.clipboard.writeText(this.dataset.url).then(() => {
+          toast("تم نسخ الرابط!", I.check);
+          this.innerHTML = `${I.check} تم النسخ`;
+          setTimeout(() => { this.innerHTML = `${I.copy} نسخ رابط المنشور`; }, 2000);
+        });
+      });
     }
 
-    // ─── DASHBOARD ──────────────────────────────────────────
+    /* ═══════════════════════════════════════════════════════════
+       DASHBOARD
+    ═══════════════════════════════════════════════════════════ */
     async function renderDashboard() {
       if (!isAdmin) { showView("home"); return; }
-      const posts = await loadPosts(true);
+      allPostsAdmin = await loadPosts(true);
       const list = document.getElementById("dash-posts-list");
       if (!list) return;
       list.innerHTML = "";
 
-      if (!posts.length) {
+      if (!allPostsAdmin.length) {
         list.innerHTML = `<div class="empty-state"><p>لا توجد مقالات بعد</p></div>`;
         return;
       }
 
-      posts.forEach(post => {
+      allPostsAdmin.forEach(post => {
         const item = document.createElement("div");
         item.className = "dash-post-item";
-        const created = formatDate(post.createdAt);
-        const updated = post.updatedAt ? formatDate(post.updatedAt) : null;
-        const hasYT = !!extractYouTubeId(post.youtubeUrl);
-        const hasDl = !!(post.attachments && post.attachments.length);
+        const cd = fmtDate(post.createdAt);
+        const ud = post.updatedAt ? fmtDate(post.updatedAt) : null;
+        const hasYT = !!extractYTId(post.youtubeUrl);
+        const hasDl = !!(post.attachments?.length);
 
         item.innerHTML = `
+          ${post.coverImage ? `<img class="dash-cover-thumb" src="${post.coverImage}" alt=""/>` : `<div class="dash-cover-thumb dash-cover-placeholder">RM</div>`}
           <div class="dash-post-info">
-            <div>
-              <div class="dash-post-title">${post.title || "بدون عنوان"}</div>
-              <div class="dash-post-meta">
-                <span>${post.category || "عام"}</span>
-                <span>${iconSvg("clock")} ${post.readTime || "5"} د</span>
-                <span>${iconSvg("eye")} ${formatViews(post.views || 0)}</span>
-                ${created ? `<span>${iconSvg("calendar")} ${created}</span>` : ""}
-                ${updated ? `<span>${iconSvg("refresh")} ${updated}</span>` : ""}
-                ${hasYT ? `<span class="dash-yt-badge">${iconSvg("youtube")} يوتيوب</span>` : ""}
-                ${hasDl ? `<span class="dash-dl-badge">${iconSvg("download")} ${(post.attachments||[]).length} ملف</span>` : ""}
-              </div>
+            <div class="dash-post-title">${post.title||"بدون عنوان"}</div>
+            <div class="dash-post-meta">
+              <span>${post.category||"عام"}</span>
+              <span>${I.clock} ${post.readTime||5} د</span>
+              <span>${I.eye} ${fmtViews(post.views||0)}</span>
+              ${cd?`<span>${I.cal} ${cd}</span>`:""}
+              ${ud?`<span>${I.refresh} ${ud}</span>`:""}
+              ${hasYT?`<span class="dash-yt-badge">${I.yt} يوتيوب</span>`:""}
+              ${hasDl?`<span class="dash-dl-badge">${I.dl} ${post.attachments.length} ملف</span>`:""}
             </div>
           </div>
-          <span class="status-badge ${post.published ? "published" : "draft"}">${post.published ? "منشور" : "مسودة"}</span>
+          <span class="status-badge ${post.published?"published":"draft"}">${post.published?"منشور":"مسودة"}</span>
           <div class="dash-actions">
-            <button class="btn-icon" title="معاينة" data-act="preview" data-id="${post.id}">${iconSvg("eye")}</button>
-            <button class="btn-icon" title="${post.published ? "إلغاء النشر" : "نشر"}" data-act="pub" data-id="${post.id}" data-pub="${post.published}">${post.published ? iconSvg("lock") : iconSvg("rocket")}</button>
-            <button class="btn-icon" title="تعديل" data-act="edit" data-id="${post.id}">${iconSvg("edit")}</button>
-            <button class="btn-icon btn-del" title="حذف" data-act="delete" data-id="${post.id}">${iconSvg("trash")}</button>
+            <button class="btn-icon" title="معاينة" data-act="preview" data-id="${post.id}">${I.eye}</button>
+            <button class="btn-icon" title="${post.published?"إلغاء النشر":"نشر"}" data-act="pub" data-id="${post.id}" data-pub="${post.published}">${post.published?I.lock:I.rocket}</button>
+            <button class="btn-icon" title="تعديل"  data-act="edit"    data-id="${post.id}">${I.edit}</button>
+            <button class="btn-icon btn-del" title="حذف" data-act="delete" data-id="${post.id}">${I.trash}</button>
           </div>`;
         list.appendChild(item);
       });
@@ -448,729 +495,664 @@
         const btn = e.target.closest("[data-act]");
         if (!btn) return;
         const { act, id, pub } = btn.dataset;
-        const post = allPosts.find(x => x.id === id);
+        const post = allPostsAdmin.find(x => x.id === id);
         if (act === "preview") showView("post", post);
-        if (act === "pub") { await togglePublish(id, pub === "true"); renderDashboard(); }
+        if (act === "pub") { await togglePublish(id, pub==="true"); renderDashboard(); }
         if (act === "edit") openEditor(post);
         if (act === "delete") {
-          if (confirm("حذف هذا المقال؟")) { await deletePost(id); renderDashboard(); }
+          if (confirm("حذف هذا المقال نهائياً؟")) { await deletePost(id); renderDashboard(); }
         }
       };
     }
 
-    // ─── EDITOR ─────────────────────────────────────────────
+    /* ═══════════════════════════════════════════════════════════
+       EDITOR
+    ═══════════════════════════════════════════════════════════ */
     function openEditor(post = null) {
       editingPostId = post?.id || null;
-      attachments = post?.attachments ? [...post.attachments] : [];
+      attachments   = post?.attachments ? [...post.attachments] : [];
       document.getElementById("editor-heading").textContent = post ? "تعديل المقال" : "مقال جديد";
-      document.getElementById("f-title").value = post?.title || "";
-      document.getElementById("f-subtitle").value = post?.subtitle || "";
-      document.getElementById("f-category").value = post?.category || "";
-      document.getElementById("f-tags").value = (post?.tags || []).join(", ");
-      document.getElementById("f-readtime").value = post?.readTime || "5";
-      document.getElementById("f-youtube").value = post?.youtubeUrl || "";
-      document.getElementById("f-content").value = post?.content || "";
-      document.getElementById("f-published").checked = !!post?.published;
-      renderAttachmentsList();
+      document.getElementById("f-title").value     = post?.title     || "";
+      document.getElementById("f-subtitle").value  = post?.subtitle  || "";
+      document.getElementById("f-category").value  = post?.category  || "";
+      document.getElementById("f-tags").value       = (post?.tags||[]).join(", ");
+      document.getElementById("f-readtime").value   = post?.readTime  || "5";
+      document.getElementById("f-youtube").value    = post?.youtubeUrl|| "";
+      document.getElementById("f-cover").value      = post?.coverImage|| "";
+      document.getElementById("f-content").value    = post?.content   || "";
+      document.getElementById("f-published").checked= !!post?.published;
+      renderAttList();
       document.getElementById("editor-modal").classList.add("active");
     }
 
     function closeEditor() {
       document.getElementById("editor-modal").classList.remove("active");
-      editingPostId = null;
-      attachments = [];
+      editingPostId = null; attachments = [];
     }
 
-    function renderAttachmentsList() {
+    function renderAttList() {
       const wrap = document.getElementById("attachments-list");
       if (!wrap) return;
-      if (!attachments.length) {
-        wrap.innerHTML = `<p class="att-empty">لا توجد ملفات بعد</p>`;
-        return;
-      }
-      wrap.innerHTML = attachments.map((a, i) => `
+      if (!attachments.length) { wrap.innerHTML = `<p class="att-empty">لا توجد ملفات</p>`; return; }
+      wrap.innerHTML = attachments.map((a,i) => `
         <div class="att-editor-item">
-          ${iconSvg("file","att-editor-icon")}
+          ${I.file}
           <span class="att-editor-name">${a.name}</span>
-          <a href="${a.url}" target="_blank" class="att-editor-link">${iconSvg("eye")}</a>
-          <button class="att-editor-del" data-idx="${i}" title="حذف">${iconSvg("x")}</button>
+          <a href="${a.url}" target="_blank" class="att-editor-link">${I.eye}</a>
+          <button class="att-editor-del" data-idx="${i}">${I.x}</button>
         </div>`).join("");
-      wrap.querySelectorAll(".att-editor-del").forEach(btn => {
-        btn.addEventListener("click", () => {
-          attachments.splice(parseInt(btn.dataset.idx), 1);
-          renderAttachmentsList();
-        });
-      });
+      wrap.querySelectorAll(".att-editor-del").forEach(b =>
+        b.addEventListener("click", () => { attachments.splice(+b.dataset.idx, 1); renderAttList(); }));
     }
 
     function addAttachment() {
-      const nameEl = document.getElementById("att-name");
-      const urlEl = document.getElementById("att-url");
-      const name = nameEl.value.trim();
-      const url = urlEl.value.trim();
-      if (!name || !url) { alert("أدخل اسم الملف والرابط."); return; }
-      attachments.push({ name, url });
-      nameEl.value = "";
-      urlEl.value = "";
-      renderAttachmentsList();
+      const n = document.getElementById("att-name").value.trim();
+      const u = document.getElementById("att-url").value.trim();
+      if (!n || !u) { toast("أدخل اسم الملف والرابط", I.x); return; }
+      attachments.push({ name: n, url: u });
+      document.getElementById("att-name").value = "";
+      document.getElementById("att-url").value  = "";
+      renderAttList();
     }
 
     async function handleSavePost(e) {
       e.preventDefault();
       const btn = document.getElementById("btn-save-post");
-      btn.disabled = true;
-      btn.innerHTML = `${iconSvg("refresh")} جارٍ الحفظ...`;
-      const tags = document.getElementById("f-tags").value.split(",").map(t => t.trim()).filter(Boolean);
+      btn.disabled = true; btn.innerHTML = `${I.refresh} جارٍ الحفظ...`;
+      const tags = document.getElementById("f-tags").value.split(",").map(t=>t.trim()).filter(Boolean);
       const data = {
-        title: document.getElementById("f-title").value.trim(),
-        subtitle: document.getElementById("f-subtitle").value.trim(),
-        category: document.getElementById("f-category").value.trim(),
+        title:       document.getElementById("f-title").value.trim(),
+        subtitle:    document.getElementById("f-subtitle").value.trim(),
+        category:    document.getElementById("f-category").value.trim(),
         tags,
-        readTime: document.getElementById("f-readtime").value.trim() || "5",
-        youtubeUrl: document.getElementById("f-youtube").value.trim(),
-        content: document.getElementById("f-content").value,
-        published: document.getElementById("f-published").checked,
+        readTime:    document.getElementById("f-readtime").value.trim() || "5",
+        youtubeUrl:  document.getElementById("f-youtube").value.trim(),
+        coverImage:  document.getElementById("f-cover").value.trim(),
+        content:     document.getElementById("f-content").value,
+        published:   document.getElementById("f-published").checked,
         attachments,
       };
       try {
         await savePost(data, editingPostId);
-        closeEditor();
-        renderDashboard();
-      } catch (ex) {
-        alert("خطأ: " + ex.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = `${iconSvg("file")} حفظ`;
-      }
+        closeEditor(); renderDashboard();
+        toast("تم الحفظ بنجاح", I.check);
+      } catch (ex) { toast("خطأ: " + ex.message, I.x); }
+      finally { btn.disabled = false; btn.innerHTML = `${I.save} حفظ`; }
     }
 
-    // ─── INIT ───────────────────────────────────────────────
-    window._go = (v, d) => showView(v, d);
+    /* ═══════════════════════════════════════════════════════════
+       INIT
+    ═══════════════════════════════════════════════════════════ */
+    window._go = (v,d) => showView(v,d);
 
     window.addEventListener("DOMContentLoaded", () => {
       applyTheme(getSavedTheme());
 
-      document.getElementById("nav-logo")?.addEventListener("click", () => showView("home"));
+      document.getElementById("nav-logo")?.addEventListener("click",  () => showView("home"));
       document.getElementById("theme-toggle")?.addEventListener("click", toggleTheme);
+
+      // ── Notification bell (FIXED) ──
       document.getElementById("notif-btn")?.addEventListener("click", () => {
-        allPosts.filter(p => p.published).forEach(p => markPostSeen(p.id));
-        updateNotifBadge(allPosts);
+        markAllSeen(allPosts);
+        refreshBadge();
+        toast("تم تعليم كل المنشورات كمقروءة", I.check);
       });
 
-      document.getElementById("auth-tab-login")?.addEventListener("click", () => switchAuthTab("login"));
+      // ── Auth modal ──
+      document.getElementById("auth-tab-login")?.addEventListener("click",    () => switchAuthTab("login"));
       document.getElementById("auth-tab-register")?.addEventListener("click", () => switchAuthTab("register"));
-      document.getElementById("btn-close-auth")?.addEventListener("click", closeAuthModal);
-      document.getElementById("auth-modal")?.addEventListener("click", e => { if (e.target.id === "auth-modal") closeAuthModal(); });
-      document.getElementById("login-form")?.addEventListener("submit", handleLogin);
-      document.getElementById("register-form")?.addEventListener("submit", handleRegister);
+      document.getElementById("btn-close-auth")?.addEventListener("click",    closeAuthModal);
+      document.getElementById("auth-modal")?.addEventListener("click", e => { if(e.target.id==="auth-modal") closeAuthModal(); });
 
+      // ── Post view ──
       document.getElementById("post-back-btn")?.addEventListener("click", () => showView("home"));
-      document.getElementById("dash-back-btn")?.addEventListener("click", () => showView("home"));
-      document.getElementById("btn-new-post")?.addEventListener("click", () => openEditor(null));
 
-      document.getElementById("editor-form")?.addEventListener("submit", handleSavePost);
+      // ── Dashboard ──
+      document.getElementById("dash-back-btn")?.addEventListener("click",  () => showView("home"));
+      document.getElementById("btn-new-post")?.addEventListener("click",   () => openEditor(null));
+
+      // ── Editor ──
+      document.getElementById("editor-form")?.addEventListener("submit",     handleSavePost);
       document.getElementById("btn-close-editor")?.addEventListener("click", closeEditor);
-      document.getElementById("editor-modal")?.addEventListener("click", e => { if (e.target.id === "editor-modal") closeEditor(); });
-
-      document.getElementById("btn-add-att")?.addEventListener("click", addAttachment);
-
+      document.getElementById("editor-modal")?.addEventListener("click", e => { if(e.target.id==="editor-modal") closeEditor(); });
+      document.getElementById("btn-add-att")?.addEventListener("click",      addAttachment);
       document.getElementById("btn-preview-editor")?.addEventListener("click", () => {
-        const tags = document.getElementById("f-tags").value.split(",").map(t => t.trim()).filter(Boolean);
+        const tags = document.getElementById("f-tags").value.split(",").map(t=>t.trim()).filter(Boolean);
         closeEditor();
         showView("post", {
-          title: document.getElementById("f-title").value,
-          subtitle: document.getElementById("f-subtitle").value,
-          category: document.getElementById("f-category").value,
-          tags,
-          readTime: document.getElementById("f-readtime").value,
+          title:      document.getElementById("f-title").value,
+          subtitle:   document.getElementById("f-subtitle").value,
+          category:   document.getElementById("f-category").value,
+          coverImage: document.getElementById("f-cover").value,
+          tags, readTime: document.getElementById("f-readtime").value,
           youtubeUrl: document.getElementById("f-youtube").value,
-          content: document.getElementById("f-content").value,
+          content:    document.getElementById("f-content").value,
           attachments,
         });
       });
 
-      showView("home");
+      // ── Deep-link: open post from URL ──
+      const deepId = getUrlPostId();
+      if (deepId) {
+        loadPosts(false).then(posts => {
+          allPosts = posts;
+          refreshBadge();
+          const found = posts.find(p => p.id === deepId);
+          if (found) {
+            markPostSeen(found.id);
+            bumpViews(found.id);
+            found.views = (found.views||0)+1;
+            showView("post", found);
+          } else {
+            showView("home");
+          }
+        });
+      } else {
+        showView("home");
+      }
     });
   </script>
 
   <style>
-    /* ── TOKENS ─────────────────────────────────────────── */
-    :root,
-    html[data-theme="dark"] {
-      --bg: #0b0d12;
-      --bg2: #10131a;
-      --bg3: #181c28;
-      --bg4: #1f2335;
-      --border: rgba(255,255,255,0.07);
-      --border2: rgba(255,255,255,0.12);
-      --text: #e2e8f8;
-      --text2: #7e879f;
-      --text3: #4a526b;
-      --accent: #6c63ff;
-      --accent2: #a78bfa;
-      --accent3: #38bdf8;
-      --green: #22c55e;
-      --red: #ef4444;
-      --orange: #f97316;
-      --yt-red: #ff0000;
-      --radius: 16px;
-      --rsm: 10px;
-      --shadow: 0 8px 32px rgba(0,0,0,0.32);
-      --shadow2: 0 2px 8px rgba(0,0,0,0.18);
-      --font: 'Cairo', sans-serif;
-      --nav-bg: rgba(11,13,18,0.88);
-      --glow1: rgba(108,99,255,0.1);
-      --glow2: rgba(56,189,248,0.07);
-      --card-hover-border: rgba(108,99,255,0.4);
+    /* ══════════════════════════════════════════════
+       TOKENS
+    ══════════════════════════════════════════════ */
+    :root, html[data-theme="dark"] {
+      --bg:#0b0d12; --bg2:#10131a; --bg3:#181c28; --bg4:#1e2235;
+      --border:rgba(255,255,255,.07); --border2:rgba(255,255,255,.13);
+      --text:#e2e8f8; --text2:#7e879f; --text3:#4a526b;
+      --accent:#6c63ff; --accent2:#a78bfa; --accent3:#38bdf8;
+      --green:#22c55e; --red:#ef4444; --orange:#f97316; --yt:#ff0000;
+      --radius:16px; --rsm:10px;
+      --shadow:0 8px 32px rgba(0,0,0,.32);
+      --shadow2:0 2px 8px rgba(0,0,0,.18);
+      --font:'Cairo',sans-serif;
+      --nav-bg:rgba(11,13,18,.9);
+      --glow1:rgba(108,99,255,.1); --glow2:rgba(56,189,248,.07);
+      --hover-border:rgba(108,99,255,.4);
+      --wa:#25d366;
     }
-
     html[data-theme="light"] {
-      --bg: #f4f6fb;
-      --bg2: #ffffff;
-      --bg3: #eef1f8;
-      --bg4: #e4e9f5;
-      --border: rgba(15,23,42,0.09);
-      --border2: rgba(15,23,42,0.15);
-      --text: #0f172a;
-      --text2: #475569;
-      --text3: #94a3b8;
-      --accent: #5b52f0;
-      --accent2: #7c3aed;
-      --accent3: #0ea5e9;
-      --green: #16a34a;
-      --red: #dc2626;
-      --orange: #ea580c;
-      --yt-red: #cc0000;
-      --radius: 16px;
-      --rsm: 10px;
-      --shadow: 0 4px 20px rgba(15,23,42,0.08);
-      --shadow2: 0 1px 4px rgba(15,23,42,0.06);
-      --font: 'Cairo', sans-serif;
-      --nav-bg: rgba(244,246,251,0.9);
-      --glow1: rgba(91,82,240,0.08);
-      --glow2: rgba(14,165,233,0.08);
-      --card-hover-border: rgba(91,82,240,0.35);
+      --bg:#f4f6fb; --bg2:#ffffff; --bg3:#eef1f8; --bg4:#e2e8f5;
+      --border:rgba(15,23,42,.09); --border2:rgba(15,23,42,.16);
+      --text:#0f172a; --text2:#475569; --text3:#94a3b8;
+      --accent:#5b52f0; --accent2:#7c3aed; --accent3:#0ea5e9;
+      --green:#16a34a; --red:#dc2626; --orange:#ea580c; --yt:#cc0000;
+      --shadow:0 4px 20px rgba(15,23,42,.09);
+      --shadow2:0 1px 4px rgba(15,23,42,.06);
+      --nav-bg:rgba(244,246,251,.92);
+      --glow1:rgba(91,82,240,.08); --glow2:rgba(14,165,233,.08);
+      --hover-border:rgba(91,82,240,.35);
+      --wa:#128c4a;
     }
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
-    body {
-      font-family: var(--font);
-      background: var(--bg);
-      color: var(--text);
-      direction: rtl;
-      min-height: 100vh;
-      font-size: 15px;
-      line-height: 1.7;
-      transition: background .3s, color .3s;
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{
+      font-family:var(--font); background:var(--bg); color:var(--text);
+      direction:rtl; min-height:100vh; font-size:15px; line-height:1.7;
+      transition:background .3s,color .3s;
     }
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 0;
+    body::before{
+      content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
       background:
-        radial-gradient(ellipse 80% 50% at 20% 0%, var(--glow1) 0%, transparent 60%),
-        radial-gradient(ellipse 60% 40% at 80% 100%, var(--glow2) 0%, transparent 60%);
+        radial-gradient(ellipse 80% 50% at 20% 0%,var(--glow1) 0%,transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 100%,var(--glow2) 0%,transparent 60%);
     }
-    a { color: inherit; text-decoration: none; }
+    a{color:inherit;text-decoration:none}
 
-    /* ── NAVBAR ─────────────────────────────────────────── */
-    nav {
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      background: var(--nav-bg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border-bottom: 1px solid var(--border);
-      min-height: 68px;
-      padding: 10px 28px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
+    /* ── NAV ── */
+    nav{
+      position:sticky; top:0; z-index:100;
+      background:var(--nav-bg); backdrop-filter:blur(20px);
+      border-bottom:1px solid var(--border);
+      min-height:66px; padding:10px 28px;
+      display:flex; align-items:center; justify-content:space-between; gap:14px;
     }
-    .nav-left { display: flex; align-items: center; gap: 16px; }
-    .nav-right-wrap { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    #nav-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .nav-left{display:flex;align-items:center;gap:14px}
+    .nav-right-wrap{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    #nav-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    #nav-logo{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+    .brand-mark{
+      width:40px;height:40px;border-radius:12px;
+      background:linear-gradient(135deg,var(--accent),var(--accent3));
+      color:#fff;font-weight:900;font-size:.84rem;
+      display:inline-flex;align-items:center;justify-content:center;
+      box-shadow:0 6px 18px rgba(108,99,255,.3);flex-shrink:0;
+    }
+    .brand-mark-sm{width:32px;height:32px;border-radius:9px;font-size:.74rem}
+    .brand-stack{display:flex;flex-direction:column;line-height:1.15}
+    .brand-name{
+      font-size:1.1rem;font-weight:900;
+      background:linear-gradient(135deg,var(--accent),var(--accent3));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+    }
+    .brand-tagline{font-size:.67rem;color:var(--text3);font-weight:600}
+    .nav-user{display:flex;align-items:center;gap:7px}
+    .avatar{
+      width:32px;height:32px;border-radius:50%;
+      background:linear-gradient(135deg,var(--accent),var(--accent3));
+      display:flex;align-items:center;justify-content:center;
+      font-weight:700;font-size:.84rem;color:#fff;flex-shrink:0;
+    }
+    .nav-username{font-size:.83rem;font-weight:600;color:var(--text2)}
 
-    #nav-logo {
-      display: flex; align-items: center; gap: 10px;
-      cursor: pointer; user-select: none;
+    /* notif bell */
+    .notif-wrap{position:relative}
+    #notif-btn{
+      width:36px;height:36px;border-radius:9px;
+      background:var(--bg3);border:1px solid var(--border);
+      cursor:pointer;display:flex;align-items:center;justify-content:center;
+      color:var(--text2);transition:all .2s;
     }
-    .brand-mark {
-      width: 40px; height: 40px;
-      border-radius: 12px;
-      background: linear-gradient(135deg, var(--accent), var(--accent3));
-      color: #fff;
-      font-weight: 900;
-      font-size: .85rem;
-      letter-spacing: .3px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 6px 18px rgba(108,99,255,.3);
-      flex-shrink: 0;
+    #notif-btn:hover,#notif-btn.has-notif{
+      color:var(--accent2);border-color:var(--accent2);
+      background:rgba(167,139,250,.1);
     }
-    .brand-mark-sm { width: 32px; height: 32px; border-radius: 9px; font-size: .75rem; }
-    .brand-stack { display: flex; flex-direction: column; line-height: 1.15; }
-    .brand-name {
-      font-size: 1.1rem; font-weight: 900;
-      background: linear-gradient(135deg, var(--accent), var(--accent3));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .brand-tagline { font-size: .68rem; color: var(--text3); font-weight: 600; }
-    .nav-user { display: flex; align-items: center; gap: 7px; }
-    .avatar {
-      width: 32px; height: 32px; border-radius: 50%;
-      background: linear-gradient(135deg,var(--accent),var(--accent3));
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: .85rem; color: #fff; flex-shrink: 0;
-    }
-    .nav-username { font-size: .84rem; font-weight: 600; color: var(--text2); }
-
-    /* Notification bell */
-    .notif-wrap { position: relative; }
-    #notif-btn {
-      width: 36px; height: 36px;
-      border-radius: 9px;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      color: var(--text2);
-      transition: all .2s;
-    }
-    #notif-btn:hover, #notif-btn.has-notif { color: var(--accent2); border-color: var(--accent2); background: rgba(167,139,250,.08); }
-    #notif-badge {
-      display: none;
-      position: absolute;
-      top: -5px; left: -5px;
-      min-width: 18px; height: 18px;
-      background: var(--red);
-      color: #fff;
-      font-size: .65rem;
-      font-weight: 800;
-      border-radius: 50px;
-      align-items: center;
-      justify-content: center;
-      padding: 0 4px;
-      border: 2px solid var(--bg);
+    #notif-badge{
+      display:none;position:absolute;top:-5px;left:-5px;
+      min-width:18px;height:18px;background:var(--red);color:#fff;
+      font-size:.64rem;font-weight:800;border-radius:50px;
+      align-items:center;justify-content:center;padding:0 4px;
+      border:2px solid var(--bg);
     }
 
-    /* ── BUTTONS ─────────────────────────────────────────── */
-    .btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-      padding: 8px 18px;
-      border: none; border-radius: 999px;
-      font-family: var(--font); font-size: .84rem; font-weight: 700;
-      cursor: pointer; transition: all .2s; text-decoration: none;
+    /* ── BUTTONS ── */
+    .btn{
+      display:inline-flex;align-items:center;justify-content:center;gap:6px;
+      padding:8px 18px;border:none;border-radius:999px;
+      font-family:var(--font);font-size:.84rem;font-weight:700;
+      cursor:pointer;transition:all .2s;
     }
-    .btn svg { flex-shrink: 0; }
-    .btn-sm { padding: 7px 14px; font-size: .8rem; }
-    .btn-primary {
-      background: linear-gradient(135deg,var(--accent),#8b5cf6);
-      color: #fff;
-      box-shadow: 0 6px 18px rgba(108,99,255,.22);
+    .btn svg{flex-shrink:0}
+    .btn-sm{padding:7px 13px;font-size:.8rem}
+    .btn-primary{
+      background:linear-gradient(135deg,var(--accent),#8b5cf6);
+      color:#fff;box-shadow:0 6px 18px rgba(108,99,255,.22);
     }
-    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(108,99,255,.32); }
-    .btn-ghost {
-      background: var(--bg3);
-      color: var(--text2);
-      border: 1px solid var(--border);
-    }
-    .btn-ghost:hover { background: var(--bg4); color: var(--text); border-color: var(--border2); }
-    .btn-full { width: 100%; }
-    .icon-btn { gap: 5px; }
-    .theme-btn { min-width: 136px; }
+    .btn-primary:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(108,99,255,.32)}
+    .btn-ghost{background:var(--bg3);color:var(--text2);border:1px solid var(--border)}
+    .btn-ghost:hover{background:var(--bg4);color:var(--text);border-color:var(--border2)}
+    .btn-full{width:100%}
+    .icon-btn{gap:5px}
+    .theme-btn{min-width:136px}
 
-    /* ── VIEWS ───────────────────────────────────────────── */
-    .view { display: none; position: relative; z-index: 1; }
-    .view.active { display: block; animation: fadeIn .28s ease; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    /* ── VIEWS ── */
+    .view{display:none;position:relative;z-index:1}
+    .view.active{display:block;animation:fadeIn .28s ease}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
-    /* ── HERO ────────────────────────────────────────────── */
-    .home-hero {
-      text-align: center;
-      padding: 64px 24px 36px;
-      max-width: 860px;
-      margin: 0 auto;
+    /* ── HERO ── */
+    .home-hero{text-align:center;padding:64px 24px 36px;max-width:860px;margin:0 auto}
+    .hero-badge{
+      display:inline-block;margin-bottom:18px;
+      background:rgba(108,99,255,.1);border:1px solid rgba(108,99,255,.25);
+      color:var(--accent2);border-radius:50px;padding:4px 16px;
+      font-size:.78rem;font-weight:700;
     }
-    .hero-badge {
-      display: inline-block;
-      margin-bottom: 18px;
-      background: rgba(108,99,255,.1);
-      border: 1px solid rgba(108,99,255,.25);
-      color: var(--accent2);
-      border-radius: 50px;
-      padding: 4px 16px;
-      font-size: .78rem;
-      font-weight: 700;
+    .hero-title{font-size:clamp(1.9rem,5vw,3.6rem);font-weight:900;line-height:1.18;margin-bottom:12px;letter-spacing:-.5px}
+    .gradient-text{
+      background:linear-gradient(135deg,#a78bfa,#38bdf8,#6c63ff);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
     }
-    .hero-title {
-      font-size: clamp(1.9rem,5vw,3.6rem);
-      font-weight: 900;
-      line-height: 1.18;
-      margin-bottom: 12px;
-      letter-spacing: -.5px;
+    .hero-desc{color:var(--text2);font-size:.96rem;max-width:580px;margin:0 auto 20px}
+    .hero-socials,.footer-links{display:flex;flex-wrap:wrap;justify-content:center;gap:8px}
+    .social-link{
+      display:inline-flex;align-items:center;gap:7px;
+      padding:9px 16px;border-radius:999px;
+      background:var(--bg2);border:1px solid var(--border);
+      color:var(--text2);transition:all .2s;
+      font-size:.84rem;font-weight:600;box-shadow:var(--shadow2);
     }
-    .gradient-text {
-      background: linear-gradient(135deg,#a78bfa,#38bdf8,#6c63ff);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .hero-desc { color: var(--text2); font-size: .96rem; max-width: 580px; margin: 0 auto 20px; }
-    .hero-socials, .footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-    .social-link {
-      display: inline-flex; align-items: center; gap: 7px;
-      padding: 9px 16px; border-radius: 999px;
-      background: var(--bg2); border: 1px solid var(--border);
-      color: var(--text2); transition: all .2s;
-      font-size: .84rem; font-weight: 600;
-      box-shadow: var(--shadow2);
-    }
-    .social-link:hover { color: var(--text); transform: translateY(-2px); border-color: var(--card-hover-border); }
+    .social-link:hover{color:var(--text);transform:translateY(-2px);border-color:var(--hover-border)}
 
-    /* ── CARDS ───────────────────────────────────────────── */
-    #posts-container { max-width: 1160px; margin: 0 auto; padding: 0 16px 80px; }
-    .category-section { margin-bottom: 48px; }
-    .category-title {
-      font-size: .88rem; font-weight: 700;
-      color: var(--text2); margin-bottom: 14px;
-      padding: 0 4px; display: flex; align-items: center; gap: 12px;
-      text-transform: uppercase; letter-spacing: .05em;
+    /* ── CARDS ── */
+    #posts-container{max-width:1160px;margin:0 auto;padding:0 16px 80px}
+    .category-section{margin-bottom:48px}
+    .category-title{
+      font-size:.86rem;font-weight:700;color:var(--text2);
+      margin-bottom:14px;padding:0 4px;
+      display:flex;align-items:center;gap:12px;
+      text-transform:uppercase;letter-spacing:.05em;
     }
-    .category-title::after { content: ""; flex: 1; height: 1px; background: var(--border); }
-    .cards-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(280px,1fr)); gap: 16px; }
+    .category-title::after{content:"";flex:1;height:1px;background:var(--border)}
+    .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
 
-    .post-card {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      cursor: pointer;
-      transition: border-color .22s, transform .22s, box-shadow .22s;
-      position: relative;
-      overflow: hidden;
-      box-shadow: var(--shadow2);
+    .post-card{
+      background:var(--bg2);border:1px solid var(--border);
+      border-radius:var(--radius);cursor:pointer;
+      transition:border-color .22s,transform .22s,box-shadow .22s;
+      overflow:hidden;box-shadow:var(--shadow2);
     }
-    .post-card::before {
-      content: "";
-      position: absolute; inset: 0;
-      background: linear-gradient(135deg,rgba(108,99,255,.04),transparent 60%);
-      opacity: 0; transition: opacity .3s;
-    }
-    .post-card:hover { border-color: var(--card-hover-border); transform: translateY(-3px); box-shadow: var(--shadow); }
-    .post-card:hover::before { opacity: 1; }
+    .post-card:hover{border-color:var(--hover-border);transform:translateY(-3px);box-shadow:var(--shadow)}
 
-    .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .card-header-left { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .card-category {
-      font-size: .7rem; font-weight: 700;
-      color: var(--accent2);
-      background: rgba(167,139,250,.1);
-      border: 1px solid rgba(167,139,250,.18);
-      border-radius: 50px; padding: 2px 10px;
-    }
-    .new-badge {
-      font-size: .65rem; font-weight: 800;
-      color: #fff;
-      background: var(--red);
-      border-radius: 50px; padding: 2px 8px;
-      animation: pulse 2s ease-in-out infinite;
-    }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.7} }
+    /* cover image on card */
+    .card-cover{width:100%;height:160px;overflow:hidden;background:var(--bg3)}
+    .card-cover img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s}
+    .post-card:hover .card-cover img{transform:scale(1.04)}
 
-    .card-media-icons { display: flex; align-items: center; gap: 5px; }
-    .media-icon { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; }
-    .yt-icon { color: var(--yt-red); background: rgba(255,0,0,.08); }
-    .dl-icon { color: var(--accent3); background: rgba(56,189,248,.08); }
+    .card-body{padding:18px}
+    .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+    .card-header-left{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    .card-category{
+      font-size:.69rem;font-weight:700;color:var(--accent2);
+      background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.18);
+      border-radius:50px;padding:2px 10px;
+    }
+    .new-badge{
+      font-size:.64rem;font-weight:800;color:#fff;
+      background:var(--red);border-radius:50px;padding:2px 8px;
+      animation:pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.65}}
+    .card-media-icons{display:flex;align-items:center;gap:5px}
+    .media-icon{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px}
+    .yt-icon{color:var(--yt);background:rgba(255,0,0,.08)}
+    .dl-icon{color:var(--accent3);background:rgba(56,189,248,.08)}
 
-    .card-title { font-size: 1rem; font-weight: 700; margin-bottom: 6px; line-height: 1.4; }
-    .card-subtitle {
-      font-size: .84rem; color: var(--text2); line-height: 1.6; margin-bottom: 12px;
-      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    .card-title{font-size:.98rem;font-weight:700;margin-bottom:5px;line-height:1.4}
+    .card-subtitle{
+      font-size:.83rem;color:var(--text2);line-height:1.6;margin-bottom:11px;
+      display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
     }
-    .card-meta {
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      font-size: .74rem; color: var(--text3); margin-bottom: 10px;
-    }
-    .meta-item { display: flex; align-items: center; gap: 3px; }
-    .meta-item svg { flex-shrink: 0; }
-    .card-footer { display: flex; align-items: center; justify-content: space-between; }
-    .tags-row { display: flex; flex-wrap: wrap; gap: 5px; }
-    .tag {
-      font-size: .68rem; font-weight: 600;
-      color: var(--accent3);
-      background: rgba(56,189,248,.07);
-      border: 1px solid rgba(56,189,248,.14);
-      border-radius: 50px; padding: 2px 8px;
+    .card-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.73rem;color:var(--text3);margin-bottom:9px}
+    .meta-item{display:flex;align-items:center;gap:3px}
+    .card-footer{display:flex;align-items:center;justify-content:space-between}
+    .tags-row{display:flex;flex-wrap:wrap;gap:5px}
+    .tag{
+      font-size:.67rem;font-weight:600;color:var(--accent3);
+      background:rgba(56,189,248,.07);border:1px solid rgba(56,189,248,.14);
+      border-radius:50px;padding:2px 8px;
     }
 
-    /* ── LOADER ──────────────────────────────────────────── */
-    #posts-loader { display: flex; justify-content: center; padding: 80px; }
-    .spinner {
-      width: 36px; height: 36px;
-      border: 3px solid var(--border2);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .empty-state { text-align: center; padding: 60px 24px; color: var(--text2); }
-    .empty-logo {
-      width: 64px; height: 64px; margin: 0 auto 14px;
-      border-radius: 18px;
-      background: linear-gradient(135deg,var(--accent),var(--accent3));
-      color: #fff; display: flex; align-items: center; justify-content: center;
-      font-size: 1.2rem; font-weight: 900;
-      box-shadow: 0 12px 28px rgba(108,99,255,.22);
+    /* ── LOADER ── */
+    #posts-loader{display:flex;justify-content:center;padding:80px}
+    .spinner{width:36px;height:36px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .empty-state{text-align:center;padding:60px 24px;color:var(--text2)}
+    .empty-logo{
+      width:64px;height:64px;margin:0 auto 14px;border-radius:18px;
+      background:linear-gradient(135deg,var(--accent),var(--accent3));
+      color:#fff;display:flex;align-items:center;justify-content:center;
+      font-size:1.2rem;font-weight:900;box-shadow:0 12px 28px rgba(108,99,255,.22);
     }
 
-    /* ── POST VIEW ───────────────────────────────────────── */
-    #view-post { max-width: 760px; margin: 0 auto; padding: 24px 24px 80px; }
-    .post-back-bar { margin-bottom: 24px; }
-    .post-header-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-    .post-cat-badge {
-      font-size: .74rem; font-weight: 700; color: var(--accent2);
-      background: rgba(167,139,250,.1); border: 1px solid rgba(167,139,250,.22);
-      border-radius: 50px; padding: 3px 12px;
+    /* ── POST VIEW ── */
+    #view-post{max-width:760px;margin:0 auto;padding:24px 24px 80px}
+    .post-back-bar{margin-bottom:22px}
+    .post-cover{width:100%;border-radius:var(--radius);overflow:hidden;margin-bottom:22px;border:1px solid var(--border)}
+    .post-cover img{width:100%;max-height:380px;object-fit:cover;display:block}
+    .post-header-meta{display:flex;align-items:center;gap:10px;margin-bottom:13px}
+    .post-cat-badge{
+      font-size:.73rem;font-weight:700;color:var(--accent2);
+      background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.22);
+      border-radius:50px;padding:3px 12px;
     }
-    .post-title { font-size: clamp(1.5rem,4vw,2.3rem); font-weight: 900; line-height: 1.25; margin-bottom: 8px; letter-spacing: -.3px; }
-    .post-subtitle-text { font-size: .96rem; color: var(--text2); margin-bottom: 12px; }
-    .post-meta-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
-    .pmeta-item { display: flex; align-items: center; gap: 4px; font-size: .78rem; color: var(--text3); }
-    .pmeta-item svg { flex-shrink: 0; }
-    .post-tags { margin-bottom: 22px; }
-    .post-divider { border: none; border-top: 1px solid var(--border); margin-bottom: 26px; }
+    .post-title{font-size:clamp(1.5rem,4vw,2.3rem);font-weight:900;line-height:1.25;margin-bottom:8px;letter-spacing:-.3px}
+    .post-subtitle-text{font-size:.96rem;color:var(--text2);margin-bottom:12px}
+    .post-meta-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+    .pmeta-item{display:flex;align-items:center;gap:4px;font-size:.78rem;color:var(--text3)}
 
-    /* YouTube player */
-    .yt-player-wrap { margin-bottom: 28px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); background: var(--bg2); }
-    .yt-player-label {
-      display: flex; align-items: center; gap: 8px;
-      padding: 12px 16px;
-      font-size: .82rem; font-weight: 700; color: var(--text2);
-      border-bottom: 1px solid var(--border);
+    /* share bar */
+    .post-share-bar{
+      display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+      margin-bottom:16px;
     }
-    .yt-label-icon { color: var(--yt-red); }
-    .yt-embed-container { position: relative; padding-bottom: 56.25%; height: 0; }
-    .yt-embed-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    .share-copy-btn{
+      display:inline-flex;align-items:center;gap:6px;
+      padding:7px 14px;border-radius:999px;
+      background:var(--bg3);border:1px solid var(--border2);
+      color:var(--text2);font-family:var(--font);font-size:.8rem;font-weight:700;
+      cursor:pointer;transition:all .2s;
+    }
+    .share-copy-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+    .share-wa-btn{
+      display:inline-flex;align-items:center;gap:6px;
+      padding:7px 14px;border-radius:999px;
+      background:rgba(37,211,102,.1);border:1px solid rgba(37,211,102,.25);
+      color:var(--wa);font-size:.8rem;font-weight:700;
+      transition:all .2s;
+    }
+    .share-wa-btn:hover{background:rgba(37,211,102,.18)}
 
-    /* Attachments in post */
-    .attachments-wrap { margin-top: 32px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--bg2); }
-    .att-title {
-      display: flex; align-items: center; gap: 8px;
-      padding: 13px 18px; border-bottom: 1px solid var(--border);
-      font-size: .84rem; font-weight: 700; color: var(--text2);
-    }
-    .att-title-icon { color: var(--accent3); }
-    .att-list { padding: 10px; display: flex; flex-direction: column; gap: 6px; }
-    .att-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 14px; border-radius: var(--rsm);
-      background: var(--bg3); border: 1px solid var(--border);
-      color: var(--text); transition: border-color .2s, background .2s;
-    }
-    .att-item:hover { border-color: var(--accent3); background: rgba(56,189,248,.05); }
-    .att-icon { color: var(--accent2); flex-shrink: 0; }
-    .att-name { flex: 1; font-size: .84rem; font-weight: 600; }
-    .att-dl-icon { color: var(--accent3); flex-shrink: 0; }
+    .post-tags{margin-bottom:20px}
+    .post-divider{border:none;border-top:1px solid var(--border);margin-bottom:24px}
 
-    /* Post body */
-    .post-body { font-size: .97rem; line-height: 1.9; }
-    .post-body h2 { font-size: 1.25rem; font-weight: 700; margin: 24px 0 10px; color: var(--text); }
-    .post-body h3 { font-size: 1.05rem; font-weight: 700; margin: 18px 0 8px; }
-    .post-body p { margin-bottom: 12px; }
-    .post-body code {
-      background: var(--bg3); border: 1px solid var(--border);
-      border-radius: 5px; padding: 2px 7px;
-      font-size: .85em; color: var(--accent3);
-      direction: ltr; display: inline-block;
+    /* YouTube */
+    .yt-player-wrap{margin-bottom:26px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);background:var(--bg2)}
+    .yt-player-label{
+      display:flex;align-items:center;gap:8px;
+      padding:11px 16px;font-size:.82rem;font-weight:700;color:var(--text2);
+      border-bottom:1px solid var(--border);
     }
-    .post-body pre { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--rsm); padding: 16px; overflow-x: auto; margin: 16px 0; direction: ltr; }
-    .post-body pre code { background: none; border: none; padding: 0; display: block; }
-    .post-body ul, .post-body ol { margin: 12px 0; padding-right: 22px; }
-    .post-body li { margin-bottom: 6px; }
-    .post-body blockquote { border-right: 3px solid var(--accent); background: rgba(108,99,255,.06); border-radius: 0 var(--rsm) var(--rsm) 0; padding: 12px 18px; margin: 16px 0; color: var(--text2); }
-    .post-body strong { color: var(--text); font-weight: 700; }
-    .post-body a { color: var(--accent2); text-decoration: underline; }
+    .yt-player-label svg{color:var(--yt)}
+    .yt-embed-container{position:relative;padding-bottom:56.25%;height:0}
+    .yt-embed-container iframe{position:absolute;top:0;left:0;width:100%;height:100%}
 
-    /* ── AUTH MODAL ──────────────────────────────────────── */
-    #auth-modal {
-      display: none; position: fixed; inset: 0; z-index: 200;
-      background: rgba(0,0,0,.58); backdrop-filter: blur(8px);
-      align-items: center; justify-content: center; padding: 20px;
+    /* Attachments */
+    .attachments-wrap{margin-top:28px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--bg2)}
+    .att-title{display:flex;align-items:center;gap:8px;padding:12px 18px;border-bottom:1px solid var(--border);font-size:.84rem;font-weight:700;color:var(--text2)}
+    .att-title svg{color:var(--accent3)}
+    .att-list{padding:10px;display:flex;flex-direction:column;gap:6px}
+    .att-item{
+      display:flex;align-items:center;gap:10px;padding:10px 14px;
+      border-radius:var(--rsm);background:var(--bg3);border:1px solid var(--border);
+      color:var(--text);transition:border-color .2s,background .2s;
     }
-    #auth-modal.active { display: flex; animation: fadeIn .2s ease; }
-    .auth-card {
-      position: relative; background: var(--bg2);
-      border: 1px solid var(--border2);
-      border-radius: var(--radius); width: 100%; max-width: 420px;
-      box-shadow: var(--shadow); overflow: hidden;
-    }
-    .auth-brand { display: flex; align-items: center; gap: 9px; padding: 18px 22px 0; }
-    .auth-brand-text { font-weight: 800; color: var(--text); }
-    .auth-tabs { display: flex; border-bottom: 1px solid var(--border); margin-top: 12px; }
-    .auth-tab {
-      flex: 1; padding: 14px; text-align: center; cursor: pointer;
-      font-family: var(--font); font-size: .88rem; font-weight: 700;
-      color: var(--text3); background: none; border: none;
-      transition: all .2s; border-bottom: 2px solid transparent;
-    }
-    .auth-tab.active-tab { color: var(--accent2); border-bottom-color: var(--accent2); }
-    .auth-body { padding: 24px 26px 24px; }
-    .auth-close {
-      position: absolute; top: 12px; left: 12px;
-      width: 30px; height: 30px; border-radius: 7px;
-      background: var(--bg3); border: 1px solid var(--border);
-      cursor: pointer; font-size: .85rem; color: var(--text2);
-      display: flex; align-items: center; justify-content: center;
-      transition: all .18s;
-    }
-    .auth-close:hover { background: var(--red); color: #fff; border-color: var(--red); }
-    .form-group { margin-bottom: 14px; }
-    .form-group label { display: block; font-size: .8rem; font-weight: 600; color: var(--text2); margin-bottom: 6px; }
-    .input-full {
-      width: 100%; background: var(--bg3);
-      border: 1px solid var(--border2);
-      border-radius: var(--rsm); padding: 10px 13px;
-      color: var(--text); font-family: var(--font); font-size: .9rem;
-      outline: none; transition: border-color .2s;
-      direction: ltr; text-align: right;
-    }
-    .input-full:focus { border-color: var(--accent); }
-    .input-full::placeholder { color: var(--text3); }
-    .auth-error { color: var(--red); font-size: .79rem; min-height: 16px; margin-bottom: 8px; }
-    .auth-switch { text-align: center; margin-top: 14px; font-size: .8rem; color: var(--text3); }
-    .auth-switch span { color: var(--accent2); cursor: pointer; font-weight: 600; }
-    .auth-switch span:hover { text-decoration: underline; }
+    .att-item:hover{border-color:var(--accent3);background:rgba(56,189,248,.05)}
+    .att-item svg:first-child{color:var(--accent2);flex-shrink:0}
+    .att-name{flex:1;font-size:.84rem;font-weight:600}
+    .att-item svg:last-child{color:var(--accent3)}
 
-    /* ── DASHBOARD ───────────────────────────────────────── */
-    #view-dashboard { max-width: 920px; margin: 0 auto; padding: 28px 24px 80px; }
-    .dash-header {
-      display: flex; align-items: flex-start; justify-content: space-between;
-      margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
-    }
-    .dash-header h2 { font-size: 1.5rem; font-weight: 800; margin-top: 6px; }
-    .dash-post-item {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--rsm); padding: 14px 16px;
-      display: flex; align-items: center; gap: 12px;
-      margin-bottom: 8px; transition: border-color .2s;
-      flex-wrap: wrap; box-shadow: var(--shadow2);
-    }
-    .dash-post-item:hover { border-color: rgba(108,99,255,.28); }
-    .dash-post-info { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; }
-    .dash-post-title { font-weight: 700; font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
-    .dash-post-meta {
-      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-      font-size: .72rem; color: var(--text3); margin-top: 3px;
-    }
-    .dash-post-meta span { display: flex; align-items: center; gap: 3px; }
-    .dash-yt-badge { color: var(--yt-red) !important; }
-    .dash-dl-badge { color: var(--accent3) !important; }
-    .status-badge { font-size: .7rem; font-weight: 700; border-radius: 50px; padding: 3px 10px; border: 1px solid; flex-shrink: 0; }
-    .status-badge.published { color: var(--green); background: rgba(34,197,94,.09); border-color: rgba(34,197,94,.18); }
-    .status-badge.draft { color: var(--orange); background: rgba(249,115,22,.09); border-color: rgba(249,115,22,.18); }
-    .dash-actions { display: flex; gap: 6px; flex-shrink: 0; }
-    .btn-icon {
-      width: 32px; height: 32px;
-      border: 1px solid var(--border); border-radius: 7px;
-      background: var(--bg3); cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      transition: all .18s; color: var(--text2);
-    }
-    .btn-icon:hover { border-color: var(--accent2); color: var(--accent2); transform: scale(1.06); }
-    .btn-del:hover { background: rgba(239,68,68,.12); border-color: var(--red); color: var(--red); }
+    /* post body */
+    .post-body{font-size:.97rem;line-height:1.9}
+    .post-body h2{font-size:1.25rem;font-weight:700;margin:24px 0 10px}
+    .post-body h3{font-size:1.05rem;font-weight:700;margin:18px 0 8px}
+    .post-body p{margin-bottom:12px}
+    .post-body code{background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:2px 7px;font-size:.84em;color:var(--accent3);direction:ltr;display:inline-block}
+    .post-body pre{background:var(--bg3);border:1px solid var(--border);border-radius:var(--rsm);padding:16px;overflow-x:auto;margin:16px 0;direction:ltr}
+    .post-body pre code{background:none;border:none;padding:0;display:block}
+    .post-body ul,.post-body ol{margin:12px 0;padding-right:22px}
+    .post-body li{margin-bottom:6px}
+    .post-body blockquote{border-right:3px solid var(--accent);background:rgba(108,99,255,.06);border-radius:0 var(--rsm) var(--rsm) 0;padding:12px 18px;margin:16px 0;color:var(--text2)}
+    .post-body strong{color:var(--text);font-weight:700}
+    .post-body a{color:var(--accent2);text-decoration:underline}
 
-    /* ── EDITOR MODAL ────────────────────────────────────── */
-    #editor-modal {
-      display: none; position: fixed; inset: 0; z-index: 300;
-      background: rgba(0,0,0,.7); backdrop-filter: blur(7px);
-      align-items: flex-start; justify-content: center;
-      padding: 20px; overflow-y: auto;
+    /* ── AUTH MODAL ── */
+    #auth-modal{
+      display:none;position:fixed;inset:0;z-index:200;
+      background:rgba(0,0,0,.58);backdrop-filter:blur(8px);
+      align-items:center;justify-content:center;padding:20px;
     }
-    #editor-modal.active { display: flex; animation: fadeIn .22s ease; }
-    .editor-card {
-      background: var(--bg2); border: 1px solid var(--border2);
-      border-radius: var(--radius); padding: 28px 26px;
-      width: 100%; max-width: 660px; margin: auto;
-      box-shadow: 0 20px 60px rgba(0,0,0,.3);
+    #auth-modal.active{display:flex;animation:fadeIn .2s ease}
+    .auth-card{
+      position:relative;background:var(--bg2);border:1px solid var(--border2);
+      border-radius:var(--radius);width:100%;max-width:420px;box-shadow:var(--shadow);overflow:hidden;
     }
-    .editor-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-    #editor-heading { font-size: 1.2rem; font-weight: 800; }
-    .editor-close {
-      width: 32px; height: 32px; background: var(--bg3);
-      border: 1px solid var(--border); border-radius: 7px;
-      cursor: pointer; display: flex; align-items: center; justify-content: center;
-      color: var(--text2); transition: all .18s;
+    .auth-brand{display:flex;align-items:center;gap:9px;padding:18px 22px 0}
+    .auth-brand-text{font-weight:800;color:var(--text)}
+    .auth-tabs{display:flex;border-bottom:1px solid var(--border);margin-top:12px}
+    .auth-tab{
+      flex:1;padding:13px;text-align:center;cursor:pointer;
+      font-family:var(--font);font-size:.88rem;font-weight:700;
+      color:var(--text3);background:none;border:none;
+      transition:all .2s;border-bottom:2px solid transparent;
     }
-    .editor-close:hover { background: var(--red); color: #fff; border-color: var(--red); }
-    .editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .editor-grid .span-2 { grid-column: 1 / -1; }
-    textarea.input-full { resize: vertical; min-height: 180px; line-height: 1.7; direction: rtl; text-align: right; }
-    .editor-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; flex-wrap: wrap; gap: 8px; }
-    .checkbox-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-    .checkbox-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
-    .checkbox-row span { font-size: .86rem; font-weight: 600; color: var(--text2); }
-    .editor-actions { display: flex; gap: 7px; }
-    .editor-section-label { font-size: .8rem; font-weight: 700; color: var(--text2); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .auth-tab.active-tab{color:var(--accent2);border-bottom-color:var(--accent2)}
+    .auth-body{padding:22px 24px 22px}
+    .auth-close{
+      position:absolute;top:11px;left:11px;
+      width:30px;height:30px;border-radius:7px;
+      background:var(--bg3);border:1px solid var(--border);
+      cursor:pointer;display:flex;align-items:center;justify-content:center;
+      color:var(--text2);transition:all .18s;
+    }
+    .auth-close:hover{background:var(--red);color:#fff;border-color:var(--red)}
+    .form-group{margin-bottom:13px}
+    .form-group label{display:block;font-size:.79rem;font-weight:600;color:var(--text2);margin-bottom:5px}
+    .input-full{
+      width:100%;background:var(--bg3);border:1px solid var(--border2);
+      border-radius:var(--rsm);padding:10px 12px;
+      color:var(--text);font-family:var(--font);font-size:.9rem;
+      outline:none;transition:border-color .2s;direction:ltr;text-align:right;
+    }
+    .input-full:focus{border-color:var(--accent)}
+    .input-full::placeholder{color:var(--text3)}
+    .auth-error{color:var(--red);font-size:.78rem;min-height:16px;margin-bottom:8px}
+    .auth-switch{text-align:center;margin-top:12px;font-size:.79rem;color:var(--text3)}
+    .auth-switch span{color:var(--accent2);cursor:pointer;font-weight:600}
+    .auth-switch span:hover{text-decoration:underline}
 
-    /* Attachments editor */
-    .att-editor-row { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; flex-wrap: wrap; }
-    .att-editor-row .input-full { flex: 1; min-width: 110px; }
-    .att-editor-row .btn { flex-shrink: 0; border-radius: var(--rsm); padding: 9px 14px; }
-    #attachments-list { display: flex; flex-direction: column; gap: 5px; }
-    .att-editor-item {
-      display: flex; align-items: center; gap: 8px;
-      padding: 8px 12px; border-radius: var(--rsm);
-      background: var(--bg3); border: 1px solid var(--border);
+    /* ── DASHBOARD ── */
+    #view-dashboard{max-width:920px;margin:0 auto;padding:28px 24px 80px}
+    .dash-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:12px}
+    .dash-header h2{font-size:1.45rem;font-weight:800;margin-top:6px}
+    .dash-post-item{
+      background:var(--bg2);border:1px solid var(--border);
+      border-radius:var(--rsm);padding:12px 14px;
+      display:flex;align-items:center;gap:12px;
+      margin-bottom:8px;transition:border-color .2s;flex-wrap:wrap;box-shadow:var(--shadow2);
     }
-    .att-editor-icon { color: var(--accent2); flex-shrink: 0; }
-    .att-editor-name { flex: 1; font-size: .82rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .att-editor-link { color: var(--accent3); display: flex; align-items: center; }
-    .att-editor-del {
-      background: none; border: none; cursor: pointer;
-      color: var(--text3); display: flex; align-items: center;
-      transition: color .18s; padding: 2px;
-    }
-    .att-editor-del:hover { color: var(--red); }
-    .att-empty { font-size: .8rem; color: var(--text3); text-align: center; padding: 8px 0; }
+    .dash-post-item:hover{border-color:rgba(108,99,255,.28)}
 
-    /* ── FOOTER ──────────────────────────────────────────── */
-    footer {
-      position: relative; z-index: 1;
-      border-top: 1px solid var(--border);
-      padding: 26px 24px 36px;
-      color: var(--text3); text-align: center;
+    /* thumbnail in dashboard */
+    .dash-cover-thumb{
+      width:52px;height:52px;border-radius:8px;object-fit:cover;
+      border:1px solid var(--border);flex-shrink:0;
     }
-    .footer-brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 12px; color: var(--text); font-weight: 800; }
-    .footer-note { margin-top: 12px; font-size: .8rem; }
+    .dash-cover-placeholder{
+      width:52px;height:52px;border-radius:8px;flex-shrink:0;
+      background:linear-gradient(135deg,var(--accent),var(--accent3));
+      display:flex;align-items:center;justify-content:center;
+      color:#fff;font-weight:900;font-size:.78rem;
+    }
 
-    /* ── RESPONSIVE ──────────────────────────────────────── */
-    @media (max-width: 768px) {
-      nav { padding: 10px 14px; flex-wrap: wrap; }
-      .brand-tagline { display: none; }
-      .theme-btn span { display: none; }
-      .theme-btn { min-width: unset; }
+    .dash-post-info{display:flex;flex-direction:column;flex:1;min-width:0}
+    .dash-post-title{font-weight:700;font-size:.91rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px}
+    .dash-post-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.71rem;color:var(--text3);margin-top:3px}
+    .dash-post-meta span{display:flex;align-items:center;gap:3px}
+    .dash-yt-badge{color:var(--yt) !important}
+    .dash-dl-badge{color:var(--accent3) !important}
+    .status-badge{font-size:.7rem;font-weight:700;border-radius:50px;padding:3px 10px;border:1px solid;flex-shrink:0}
+    .status-badge.published{color:var(--green);background:rgba(34,197,94,.09);border-color:rgba(34,197,94,.18)}
+    .status-badge.draft{color:var(--orange);background:rgba(249,115,22,.09);border-color:rgba(249,115,22,.18)}
+    .dash-actions{display:flex;gap:6px;flex-shrink:0}
+    .btn-icon{
+      width:32px;height:32px;border:1px solid var(--border);border-radius:7px;
+      background:var(--bg3);cursor:pointer;display:flex;align-items:center;justify-content:center;
+      transition:all .18s;color:var(--text2);
     }
-    @media (max-width: 640px) {
-      .cards-grid { grid-template-columns: 1fr; }
-      .editor-grid { grid-template-columns: 1fr; }
-      .editor-grid .span-2 { grid-column: 1; }
-      .auth-body { padding: 20px 16px 18px; }
-      .nav-right-wrap { width: 100%; }
-      #nav-right { flex-wrap: wrap; }
-      .dash-post-title { max-width: 180px; }
+    .btn-icon:hover{border-color:var(--accent2);color:var(--accent2);transform:scale(1.06)}
+    .btn-del:hover{background:rgba(239,68,68,.12);border-color:var(--red);color:var(--red)}
+
+    /* ── EDITOR ── */
+    #editor-modal{
+      display:none;position:fixed;inset:0;z-index:300;
+      background:rgba(0,0,0,.72);backdrop-filter:blur(7px);
+      align-items:flex-start;justify-content:center;
+      padding:20px;overflow-y:auto;
+    }
+    #editor-modal.active{display:flex;animation:fadeIn .22s ease}
+    .editor-card{
+      background:var(--bg2);border:1px solid var(--border2);
+      border-radius:var(--radius);padding:26px 24px;
+      width:100%;max-width:660px;margin:auto;
+      box-shadow:0 20px 60px rgba(0,0,0,.3);
+    }
+    .editor-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+    #editor-heading{font-size:1.18rem;font-weight:800}
+    .editor-close{
+      width:32px;height:32px;background:var(--bg3);border:1px solid var(--border);
+      border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+      color:var(--text2);transition:all .18s;
+    }
+    .editor-close:hover{background:var(--red);color:#fff;border-color:var(--red)}
+    .editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+    .editor-grid .span-2{grid-column:1/-1}
+    textarea.input-full{resize:vertical;min-height:170px;line-height:1.7;direction:rtl;text-align:right}
+    .editor-footer{display:flex;align-items:center;justify-content:space-between;margin-top:14px;flex-wrap:wrap;gap:8px}
+    .checkbox-row{display:flex;align-items:center;gap:8px;cursor:pointer}
+    .checkbox-row input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+    .checkbox-row span{font-size:.85rem;font-weight:600;color:var(--text2)}
+    .editor-actions{display:flex;gap:7px}
+    .editor-section-label{font-size:.79rem;font-weight:700;color:var(--text2);margin-bottom:7px;display:flex;align-items:center;gap:5px}
+
+    /* attachments in editor */
+    .att-editor-row{display:flex;gap:7px;margin-bottom:9px;align-items:center;flex-wrap:wrap}
+    .att-editor-row .input-full{flex:1;min-width:110px}
+    #attachments-list{display:flex;flex-direction:column;gap:5px}
+    .att-editor-item{
+      display:flex;align-items:center;gap:8px;padding:7px 11px;
+      border-radius:var(--rsm);background:var(--bg3);border:1px solid var(--border);
+    }
+    .att-editor-item svg:first-child{color:var(--accent2);flex-shrink:0}
+    .att-editor-name{flex:1;font-size:.81rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .att-editor-link{color:var(--accent3);display:flex;align-items:center}
+    .att-editor-del{background:none;border:none;cursor:pointer;color:var(--text3);display:flex;align-items:center;padding:2px;transition:color .18s}
+    .att-editor-del:hover{color:var(--red)}
+    .att-empty{font-size:.79rem;color:var(--text3);text-align:center;padding:7px 0}
+
+    /* ── FLOATING WHATSAPP ── */
+    .wa-float{
+      position:fixed;bottom:26px;left:26px;z-index:99;
+      width:52px;height:52px;border-radius:50%;
+      background:var(--wa);
+      display:flex;align-items:center;justify-content:center;
+      box-shadow:0 6px 22px rgba(37,211,102,.45);
+      transition:transform .2s,box-shadow .2s;
+      cursor:pointer;
+    }
+    .wa-float:hover{transform:scale(1.1);box-shadow:0 10px 30px rgba(37,211,102,.55)}
+    .wa-float svg{width:28px;height:28px;fill:#fff}
+    .wa-float-pulse{
+      position:absolute;inset:-4px;border-radius:50%;
+      border:2px solid var(--wa);opacity:.5;
+      animation:wa-pulse 2.2s ease-out infinite;
+    }
+    @keyframes wa-pulse{0%{transform:scale(1);opacity:.5}100%{transform:scale(1.6);opacity:0}}
+
+    /* ── TOAST ── */
+    .rm-toast{
+      position:fixed;bottom:88px;left:50%;transform:translateX(-50%) translateY(14px);
+      z-index:9999;background:var(--bg2);border:1px solid var(--border2);
+      border-radius:999px;padding:9px 20px;
+      display:flex;align-items:center;gap:8px;
+      font-size:.82rem;font-weight:600;color:var(--text);
+      box-shadow:var(--shadow);opacity:0;
+      transition:opacity .25s,transform .25s;
+      white-space:nowrap;
+    }
+    .rm-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    .toast-icon svg{color:var(--green)}
+
+    /* ── FOOTER ── */
+    footer{
+      position:relative;z-index:1;border-top:1px solid var(--border);
+      padding:24px 24px 34px;color:var(--text3);text-align:center;
+    }
+    .footer-brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px;color:var(--text);font-weight:800}
+    .footer-note{margin-top:12px;font-size:.79rem}
+
+    /* ── RESPONSIVE ── */
+    @media(max-width:768px){
+      nav{padding:10px 14px;flex-wrap:wrap}
+      .brand-tagline{display:none}
+      .theme-btn span{display: none}
+      .theme-btn{min-width:unset}
+      .wa-float{bottom:18px;left:18px;width:46px;height:46px}
+    }
+    @media(max-width:640px){
+      .cards-grid{grid-template-columns:1fr}
+      .editor-grid{grid-template-columns:1fr}
+      .editor-grid .span-2{grid-column:1}
+      .auth-body{padding:18px 16px 18px}
+      .dash-post-title{max-width:160px}
     }
   </style>
 </head>
 <body>
 
-<!-- ── NAV ──────────────────────────────────────────────────── -->
+<!-- ══ NAV ═══════════════════════════════════════════════════ -->
 <nav>
   <div class="nav-left">
     <div id="nav-logo">
@@ -1185,7 +1167,7 @@
     <button id="theme-toggle" class="btn btn-ghost btn-sm theme-btn icon-btn" type="button"></button>
     <div class="notif-wrap">
       <button id="notif-btn" title="الإشعارات">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
       </button>
       <span id="notif-badge"></span>
     </div>
@@ -1193,72 +1175,71 @@
   </div>
 </nav>
 
-<!-- ── HOME ─────────────────────────────────────────────────── -->
+<!-- ══ HOME ══════════════════════════════════════════════════ -->
 <div id="view-home" class="view">
   <div class="home-hero">
     <div class="hero-badge">✦ تعلّم · اكتشف · تطوّر</div>
     <h1 class="hero-title"><span class="gradient-text">محتوى ReelMaster</span><br/>يصنع الفارق</h1>
-    <p class="hero-desc">مقالات وشروحات مختارة في التقنية والبرمجة وكل ما يهمك، مع تجربة أنيقة في الوضع الداكن والوضع الفاتح.</p>
+    <p class="hero-desc">مقالات وشروحات مختارة في التقنية والبرمجة وكل ما يهمك، مع تجربة أنيقة في الوضع الداكن والفاتح.</p>
     <div class="hero-socials">
       <a class="social-link" href="https://www.youtube.com/@ReelMaster-o5x" target="_blank" rel="noopener">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:var(--yt-red)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:var(--yt)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
         YouTube
       </a>
       <a class="social-link" href="https://www.instagram.com/reel_master72/" target="_blank" rel="noopener">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
         Instagram
       </a>
       <a class="social-link" href="https://steven.nzmly.com/" target="_blank" rel="noopener">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
         Website
       </a>
-      <a class="social-link" href="https://api.whatsapp.com/send/?phone=%2B201552271788&text&type=phone_number&app_absent=0" target="_blank" rel="noopener">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:#25d366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>
+      <a class="social-link" href="https://api.whatsapp.com/send/?phone=%2B201552271788" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:var(--wa)"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>
         WhatsApp
       </a>
     </div>
   </div>
-
   <div id="posts-container">
     <div id="posts-loader"><div class="spinner"></div></div>
     <div id="posts-grid"></div>
   </div>
 </div>
 
-<!-- ── POST VIEW ─────────────────────────────────────────────── -->
+<!-- ══ POST VIEW ══════════════════════════════════════════════ -->
 <div id="view-post" class="view">
-  <div class="post-back-bar" style="padding:20px 24px 0">
+  <div class="post-back-bar" style="padding:18px 24px 0">
     <button id="post-back-btn" class="btn btn-ghost btn-sm icon-btn">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
       العودة
     </button>
   </div>
   <div id="post-content"></div>
 </div>
 
-<!-- ── DASHBOARD ─────────────────────────────────────────────── -->
+<!-- ══ DASHBOARD ══════════════════════════════════════════════ -->
 <div id="view-dashboard" class="view">
   <div class="dash-header">
     <div>
       <button id="dash-back-btn" class="btn btn-ghost btn-sm icon-btn" style="margin-bottom:10px">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         الرئيسية
       </button>
       <h2>لوحة تحكم ReelMaster</h2>
     </div>
     <button id="btn-new-post" class="btn btn-primary">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       مقال جديد
     </button>
   </div>
   <div id="dash-posts-list"></div>
 </div>
 
-<!-- ── AUTH MODAL ────────────────────────────────────────────── -->
+<!-- ══ AUTH MODAL ═════════════════════════════════════════════ -->
 <div id="auth-modal">
   <div class="auth-card">
     <button id="btn-close-auth" class="auth-close">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
     <div class="auth-brand">
       <span class="brand-mark brand-mark-sm">RM</span>
@@ -1268,37 +1249,20 @@
       <button id="auth-tab-login" class="auth-tab active-tab">تسجيل الدخول</button>
       <button id="auth-tab-register" class="auth-tab">إنشاء حساب</button>
     </div>
-
     <div id="auth-panel-login" class="auth-body">
       <form id="login-form">
-        <div class="form-group">
-          <label>البريد الإلكتروني</label>
-          <input type="email" id="login-email" class="input-full" placeholder="example@email.com" required />
-        </div>
-        <div class="form-group">
-          <label>كلمة المرور</label>
-          <input type="password" id="login-pass" class="input-full" placeholder="••••••••" required />
-        </div>
+        <div class="form-group"><label>البريد الإلكتروني</label><input type="email" id="login-email" class="input-full" placeholder="example@email.com" required/></div>
+        <div class="form-group"><label>كلمة المرور</label><input type="password" id="login-pass" class="input-full" placeholder="••••••••" required/></div>
         <div id="login-error" class="auth-error"></div>
         <button type="submit" class="btn btn-primary btn-full">دخول</button>
       </form>
       <div class="auth-switch">مش عندك حساب؟ <span onclick="document.getElementById('auth-tab-register').click()">سجّل دلوقتي</span></div>
     </div>
-
     <div id="auth-panel-register" class="auth-body" style="display:none">
       <form id="register-form">
-        <div class="form-group">
-          <label>الاسم</label>
-          <input type="text" id="reg-name" class="input-full" placeholder="اسمك الكامل" required />
-        </div>
-        <div class="form-group">
-          <label>البريد الإلكتروني</label>
-          <input type="email" id="reg-email" class="input-full" placeholder="example@email.com" required />
-        </div>
-        <div class="form-group">
-          <label>كلمة المرور (6 أحرف على الأقل)</label>
-          <input type="password" id="reg-pass" class="input-full" placeholder="••••••••" required />
-        </div>
+        <div class="form-group"><label>الاسم</label><input type="text" id="reg-name" class="input-full" placeholder="اسمك الكامل" required/></div>
+        <div class="form-group"><label>البريد الإلكتروني</label><input type="email" id="reg-email" class="input-full" placeholder="example@email.com" required/></div>
+        <div class="form-group"><label>كلمة المرور (6 أحرف على الأقل)</label><input type="password" id="reg-pass" class="input-full" placeholder="••••••••" required/></div>
         <div id="register-error" class="auth-error"></div>
         <button type="submit" class="btn btn-primary btn-full">إنشاء الحساب</button>
       </form>
@@ -1307,53 +1271,53 @@
   </div>
 </div>
 
-<!-- ── EDITOR MODAL ──────────────────────────────────────────── -->
+<!-- ══ EDITOR MODAL ═══════════════════════════════════════════ -->
 <div id="editor-modal">
   <div class="editor-card">
     <div class="editor-header">
       <h3 id="editor-heading">مقال جديد</h3>
       <button id="btn-close-editor" class="editor-close">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <form id="editor-form">
       <div class="editor-grid">
+        <div class="span-2"><div class="form-group"><label>العنوان الرئيسي</label><input type="text" id="f-title" class="input-full" placeholder="عنوان المقال..." required/></div></div>
+        <div class="span-2"><div class="form-group"><label>العنوان الفرعي</label><input type="text" id="f-subtitle" class="input-full" placeholder="وصف قصير..."/></div></div>
+        <div><div class="form-group"><label>التصنيف</label><input type="text" id="f-category" class="input-full" placeholder="برمجة، تقنية..."/></div></div>
+        <div><div class="form-group"><label>وقت القراءة (دقائق)</label><input type="number" id="f-readtime" class="input-full" placeholder="5" min="1"/></div></div>
+        <div class="span-2"><div class="form-group"><label>الوسوم (مفصولة بفاصلة)</label><input type="text" id="f-tags" class="input-full" placeholder="JS, React, API"/></div></div>
         <div class="span-2">
-          <div class="form-group"><label>العنوان الرئيسي</label><input type="text" id="f-title" class="input-full" placeholder="عنوان المقال..." required /></div>
-        </div>
-        <div class="span-2">
-          <div class="form-group"><label>العنوان الفرعي</label><input type="text" id="f-subtitle" class="input-full" placeholder="وصف قصير..." /></div>
-        </div>
-        <div>
-          <div class="form-group"><label>التصنيف</label><input type="text" id="f-category" class="input-full" placeholder="برمجة، تقنية..." /></div>
-        </div>
-        <div>
-          <div class="form-group"><label>وقت القراءة (دقائق)</label><input type="number" id="f-readtime" class="input-full" placeholder="5" min="1" /></div>
-        </div>
-        <div class="span-2">
-          <div class="form-group"><label>الوسوم (مفصولة بفاصلة)</label><input type="text" id="f-tags" class="input-full" placeholder="JS, React, API" /></div>
+          <div class="form-group">
+            <label>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-left:4px"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              رابط صورة الغلاف (Cover Image)
+            </label>
+            <input type="url" id="f-cover" class="input-full" placeholder="https://example.com/image.jpg" style="direction:ltr;text-align:left"/>
+          </div>
         </div>
         <div class="span-2">
           <div class="form-group">
-            <label>رابط فيديو يوتيوب (اختياري)</label>
-            <input type="url" id="f-youtube" class="input-full" placeholder="https://www.youtube.com/watch?v=..." />
+            <label>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-left:4px;color:var(--yt)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+              رابط فيديو يوتيوب (اختياري)
+            </label>
+            <input type="url" id="f-youtube" class="input-full" placeholder="https://www.youtube.com/watch?v=..." style="direction:ltr;text-align:left"/>
           </div>
         </div>
-        <div class="span-2">
-          <div class="form-group"><label>المحتوى (HTML مدعوم)</label><textarea id="f-content" class="input-full" placeholder="اكتب محتوى المقال هنا...&#10;يمكنك استخدام HTML: &lt;h2&gt;، &lt;p&gt;، &lt;code&gt;، &lt;ul&gt;..."></textarea></div>
-        </div>
+        <div class="span-2"><div class="form-group"><label>المحتوى (HTML مدعوم)</label><textarea id="f-content" class="input-full" placeholder="اكتب محتوى المقال هنا...&#10;يمكنك استخدام: &lt;h2&gt;، &lt;p&gt;، &lt;code&gt;، &lt;ul&gt;..."></textarea></div></div>
 
-        <!-- Attachments section -->
+        <!-- attachments -->
         <div class="span-2">
           <div class="editor-section-label">
-            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             ملفات للتنزيل
           </div>
           <div class="att-editor-row">
-            <input type="text" id="att-name" class="input-full" placeholder="اسم الملف (مثل: ملف الشرح.pdf)" style="direction:rtl;text-align:right" />
-            <input type="url" id="att-url" class="input-full" placeholder="رابط التنزيل" style="direction:ltr;text-align:left" />
-            <button type="button" id="btn-add-att" class="btn btn-ghost" style="border-radius:var(--rsm);padding:9px 14px">
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <input type="text" id="att-name" class="input-full" placeholder="اسم الملف (مثال: ملف الشرح.pdf)" style="direction:rtl;text-align:right"/>
+            <input type="url"  id="att-url"  class="input-full" placeholder="رابط التنزيل" style="direction:ltr;text-align:left;flex:1.4"/>
+            <button type="button" id="btn-add-att" class="btn btn-ghost" style="border-radius:var(--rsm);padding:9px 14px;gap:5px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               إضافة
             </button>
           </div>
@@ -1363,16 +1327,16 @@
 
       <div class="editor-footer">
         <label class="checkbox-row">
-          <input type="checkbox" id="f-published" />
+          <input type="checkbox" id="f-published"/>
           <span>نشر فوراً</span>
         </label>
         <div class="editor-actions">
           <button type="button" id="btn-preview-editor" class="btn btn-ghost">
-            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
             معاينة
           </button>
           <button type="submit" id="btn-save-post" class="btn btn-primary">
-            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             حفظ
           </button>
         </div>
@@ -1381,7 +1345,13 @@
   </div>
 </div>
 
-<!-- ── FOOTER ────────────────────────────────────────────────── -->
+<!-- ══ FLOATING WHATSAPP ══════════════════════════════════════ -->
+<a class="wa-float" href="https://api.whatsapp.com/send/?phone=%2B201552271788" target="_blank" rel="noopener" title="تواصل معنا على واتساب">
+  <div class="wa-float-pulse"></div>
+  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>
+</a>
+
+<!-- ══ FOOTER ═════════════════════════════════════════════════ -->
 <footer>
   <div class="footer-brand">
     <span class="brand-mark brand-mark-sm">RM</span>
@@ -1391,7 +1361,7 @@
     <a class="social-link" href="https://www.youtube.com/@ReelMaster-o5x" target="_blank" rel="noopener">YouTube</a>
     <a class="social-link" href="https://www.instagram.com/reel_master72/" target="_blank" rel="noopener">Instagram</a>
     <a class="social-link" href="https://steven.nzmly.com/" target="_blank" rel="noopener">Website</a>
-    <a class="social-link" href="https://api.whatsapp.com/send/?phone=%2B201552271788&text&type=phone_number&app_absent=0" target="_blank" rel="noopener">WhatsApp</a>
+    <a class="social-link" href="https://api.whatsapp.com/send/?phone=%2B201552271788" target="_blank" rel="noopener">WhatsApp</a>
   </div>
   <p class="footer-note">© 2024 ReelMaster · صُنع بـ ❤️ للمحتوى التعليمي العربي</p>
 </footer>
